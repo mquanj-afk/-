@@ -28,8 +28,8 @@ st.info(
 # SUPABASE_KEY = "sb_publishable_xxxx"
 # GEMINI_API_KEY = "AIza..."   # 任意。未設定ならサイドバーで都度入力できます。
 try:
-    SUPABASE_URL = st.secrets["https://deusdcxfgcwzezovsebv.supabase.co"]
-    SUPABASE_KEY = st.secrets["sb_publishable_Xkz0kpAT_oyF_a1qNkA9PA_TuXsQy-s"]
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
     st.sidebar.warning("⚠️ Secretsが未設定です。下に直接入力してください(本番運用ではsecrets.tomlを使用推奨)。")
     SUPABASE_URL = st.sidebar.text_input("Supabase URL", value="")
