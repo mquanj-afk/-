@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import google.generativeai as genai
 from PIL import Image
 from supabase import create_client, Client
@@ -261,6 +262,31 @@ def parse_nutrition(text: str) -> dict:
     }
 
 
+def render_rakuten_widget(affiliate_id: str):
+    """楽天の「ジャンルマッチ商品リンク」ウィジェットを埋め込む。
+    st.markdownでは<script>タグが実行されないため、components.htmlで
+    独立したiframeとして描画する。"""
+    if not affiliate_id:
+        return
+    widget_html = f"""
+    <script type="text/javascript">
+    rakuten_design="slide";
+    rakuten_affiliateId="{affiliate_id}";
+    rakuten_items="ctsmatch";
+    rakuten_genreId="0";
+    rakuten_size="468x160";
+    rakuten_target="_blank";
+    rakuten_theme="gray";
+    rakuten_border="off";
+    rakuten_auto_mode="on";
+    rakuten_genre_title="off";
+    rakuten_recommend="on";
+    </script>
+    <script type="text/javascript" src="https://xml.affiliate.rakuten.co.jp/widget/js/rakuten_widget.js?20230106"></script>
+    """
+    components.html(widget_html, height=180)
+
+
 # =========================================================
 # 6. メインタブ
 # =========================================================
@@ -330,7 +356,19 @@ with tab_record:
                         supabase.table("diet_history_secure").insert(history_data).execute()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"エラーが発生しました: {e}")
+                        error_text = str(e)
+                        if "429" in error_text or "quota" in error_text.lower():
+                            st.error(
+                                "⚠️ 現在、AI分析の無料利用回数の上限に達しています。\n\n"
+                                "Gemini APIの無料枠には1日あたりのリクエスト数に上限があります。"
+                                "しばらく時間をおいてから再度お試しいただくか、"
+                                "ご自身のGemini API Keyの利用状況・プランをご確認ください。\n\n"
+                                "詳細: https://ai.google.dev/gemini-api/docs/rate-limits"
+                            )
+                        elif "api_key" in error_text.lower() or "api key" in error_text.lower():
+                            st.error("⚠️ Gemini API Keyが正しくないか、無効になっている可能性があります。入力内容をご確認ください。")
+                        else:
+                            st.error(f"エラーが発生しました: {e}")
 
     if st.session_state["current_result"]:
         st.success("分析完了！保存されました。")
@@ -451,14 +489,46 @@ with tab_history:
                         mime="text/csv",
                     )
 
-                # Amazonアフィリエイト
+                # 不足栄養素の購入リンク (Amazon / 楽天)
                 st.markdown("---")
-                st.subheader("🛒 不足栄養素をAmazonで補給する")
+                st.subheader("🛒 不足栄養素を購入する")
                 search_keyword = st.text_input("購入・検索したい健康食材", value="プロテイン")
-                YOUR_ASSOCIATE_ID = st.secrets.get("AMAZON_ASSOCIATE_ID", "your_id-22") if hasattr(st, "secrets") else "your_id-22"
-                params = {"k": str(search_keyword).strip(), "tag": YOUR_ASSOCIATE_ID}
-                amazon_url = "https://www.amazon.co.jp/s?" + urllib.parse.urlencode(params)
-                st.link_button(f"👉 Amazonで「{search_keyword}」をチェックする", amazon_url, use_container_width=True)
+
+                col_amazon, col_rakuten = st.columns(2)
+
+                # 楽天アフィリエイトID: Secretsに設定があればそちらを優先。
+                # 未設定の場合のフォールバック値(ご自身のIDに変更・削除可)。
+                rakuten_id = (
+                    st.secrets.get("RAKUTEN_AFFILIATE_ID", "574c4fde.6cc334c0.574c4fdf.5d2c3a1a")
+                    if hasattr(st, "secrets")
+                    else "574c4fde.6cc334c0.574c4fdf.5d2c3a1a"
+                )
+
+                with col_amazon:
+                    amazon_tag = (
+                        st.secrets.get("AMAZON_ASSOCIATE_ID", "your_id-22") if hasattr(st, "secrets") else "your_id-22"
+                    )
+                    amazon_params = {"k": str(search_keyword).strip(), "tag": amazon_tag}
+                    amazon_url = "https://www.amazon.co.jp/s?" + urllib.parse.urlencode(amazon_params)
+                    st.link_button(f"👉 Amazonで「{search_keyword}」を見る", amazon_url, use_container_width=True)
+
+                with col_rakuten:
+                    rakuten_search_url = (
+                        f"https://search.rakuten.co.jp/search/mall/{urllib.parse.quote(str(search_keyword).strip())}/"
+                    )
+                    if rakuten_id:
+                        encoded_target = urllib.parse.quote(rakuten_search_url, safe="")
+                        rakuten_url = (
+                            f"https://hb.afl.rakuten.co.jp/hgc/{rakuten_id}/?pc={encoded_target}&m={encoded_target}"
+                        )
+                    else:
+                        # アフィリエイトIDが未設定の場合は通常の検索リンク(成果報酬は発生しません)
+                        rakuten_url = rakuten_search_url
+                    st.link_button(f"👉 楽天市場で「{search_keyword}」を見る", rakuten_url, use_container_width=True)
+
+                # 楽天ジャンルマッチ商品リンク(自動おすすめスライドバナー)
+                st.caption("🎁 楽天のおすすめ商品")
+                render_rakuten_widget(rakuten_id)
         except Exception as e:
             st.error(f"履歴データの取得に失敗しました: {e}")
 
@@ -466,5 +536,5 @@ st.markdown("---")
 with st.expander("📜 本アプリの規約・プライバシーポリシー"):
     st.caption(
         "当アプリは、ユーザー登録情報をSupabaseを介して保護し、許可なく第三者に開示することはありません。"
-        "Amazonアソシエイト・プログラムの参加者です。"
+        "Amazonアソシエイト・プログラム、楽天アフィリエイトの参加者です。"
     )
