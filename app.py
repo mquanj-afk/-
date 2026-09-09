@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import google.generativeai as genai
 from PIL import Image
 from supabase import create_client, Client
@@ -204,9 +203,51 @@ if st.session_state["user_id"]:
             st.session_state["profile"] = {**new_profile, "user_id": st.session_state["user_id"]}
             st.sidebar.success("プロフィールを保存しました。次回ログイン時から自動入力されます。")
 
-api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
-if not api_key:
-    api_key = st.sidebar.text_input("Gemini API Keyを入力してください", type="password")
+# =========================================================
+# 3.5 AI利用: 運営者の共有キー(1日の無料回数あり) + 自分のキー(無制限)
+# =========================================================
+DAILY_FREE_LIMIT = 5  # 共有キーで1日に無料利用できる回数
+
+SHARED_GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
+
+
+def get_today_usage_count(user_id: str) -> int:
+    """今日、その user_id が診断に使った回数を diet_history_secure から数える。"""
+    if not supabase or not user_id:
+        return 0
+    today_start = datetime.now().strftime("%Y-%m-%dT00:00:00")
+    try:
+        res = (
+            supabase.table("diet_history_secure")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("created_at", today_start)
+            .execute()
+        )
+        return res.count or 0
+    except Exception:
+        return 0
+
+
+today_usage = get_today_usage_count(st.session_state["user_id"]) if st.session_state["user_id"] else 0
+remaining_free = max(0, DAILY_FREE_LIMIT - today_usage)
+
+with st.sidebar.expander("🔑 自分のGemini API Keyを使う(任意・無制限)", expanded=False):
+    st.caption(
+        "何も入力しなければ、運営者の共有キーで1日"
+        f"{DAILY_FREE_LIMIT}回まで無料でお試しいただけます。"
+        "もっと使いたい方だけ、ご自身のAPI Keyを入力してください。"
+    )
+    user_api_key = st.text_input("Gemini API Key", type="password", key="user_gemini_key")
+
+if user_api_key:
+    api_key = user_api_key
+    st.sidebar.caption("✅ ご自身のAPI Keyを使用します(無制限)")
+elif SHARED_GEMINI_KEY and st.session_state["user_id"]:
+    api_key = SHARED_GEMINI_KEY
+    st.sidebar.caption(f"🆓 共有キーを使用中(本日の残り: {remaining_free}/{DAILY_FREE_LIMIT}回)")
+else:
+    api_key = ""
 
 
 # =========================================================
@@ -262,29 +303,65 @@ def parse_nutrition(text: str) -> dict:
     }
 
 
-def render_rakuten_widget(affiliate_id: str):
-    """楽天の「ジャンルマッチ商品リンク」ウィジェットを埋め込む。
-    st.markdownでは<script>タグが実行されないため、components.htmlで
-    独立したiframeとして描画する。"""
-    if not affiliate_id:
-        return
-    widget_html = f"""
-    <script type="text/javascript">
-    rakuten_design="slide";
-    rakuten_affiliateId="{affiliate_id}";
-    rakuten_items="ctsmatch";
-    rakuten_genreId="0";
-    rakuten_size="468x160";
-    rakuten_target="_blank";
-    rakuten_theme="gray";
-    rakuten_border="off";
-    rakuten_auto_mode="on";
-    rakuten_genre_title="off";
-    rakuten_recommend="on";
-    </script>
-    <script type="text/javascript" src="https://xml.affiliate.rakuten.co.jp/widget/js/rakuten_widget.js?20230106"></script>
-    """
-    components.html(widget_html, height=180)
+def suggest_shopping_keyword(protein_g: float, fat_g: float, carbs_g: float) -> str:
+    """今日のPFCバランスから、不足していそうな栄養素にあわせた検索キーワードを提案する。"""
+    total_kcal = protein_g * 4 + fat_g * 9 + carbs_g * 4
+    if total_kcal <= 0:
+        return "マルチビタミン"
+
+    protein_ratio = (protein_g * 4) / total_kcal
+    fat_ratio = (fat_g * 9) / total_kcal
+    carbs_ratio = (carbs_g * 4) / total_kcal
+
+    # 一般的な推奨PFCバランス(P:13-20% F:20-30% C:50-65%)を目安に判定
+    if protein_ratio < 0.13:
+        return "プロテイン"
+    if fat_ratio < 0.15:
+        return "オメガ3 DHA EPA サプリ"
+    if carbs_ratio > 0.70:
+        return "食物繊維 サプリ"
+    return "マルチビタミン"
+
+
+def render_shopping_links(default_keyword: str, key_suffix: str):
+    """Amazon/楽天市場への検索リンクボタンを描画する(複数タブから呼び出せる共通部品)。"""
+    st.markdown("---")
+    st.subheader("🛒 不足栄養素を購入する")
+    search_keyword = st.text_input(
+        "購入・検索したい健康食材", value=default_keyword, key=f"search_kw_{key_suffix}"
+    )
+
+    amazon_tag = st.secrets.get("AMAZON_ASSOCIATE_ID", "your_id-22") if hasattr(st, "secrets") else "your_id-22"
+    rakuten_id = st.secrets.get("RAKUTEN_AFFILIATE_ID", "") if hasattr(st, "secrets") else ""
+
+    col_amazon, col_rakuten = st.columns(2)
+
+    with col_amazon:
+        amazon_params = {"k": str(search_keyword).strip(), "tag": amazon_tag}
+        amazon_url = "https://www.amazon.co.jp/s?" + urllib.parse.urlencode(amazon_params)
+        st.link_button(
+            f"👉 Amazonで「{search_keyword}」を見る",
+            amazon_url,
+            use_container_width=True,
+            key=f"amazon_btn_{key_suffix}",
+        )
+
+    with col_rakuten:
+        rakuten_search_url = (
+            f"https://search.rakuten.co.jp/search/mall/{urllib.parse.quote(str(search_keyword).strip())}/"
+        )
+        if rakuten_id:
+            encoded_target = urllib.parse.quote(rakuten_search_url, safe="")
+            rakuten_url = f"https://hb.afl.rakuten.co.jp/hgc/{rakuten_id}/?pc={encoded_target}&m={encoded_target}"
+        else:
+            # アフィリエイトIDが未設定の場合は通常の検索リンク(成果報酬は発生しません)
+            rakuten_url = rakuten_search_url
+        st.link_button(
+            f"👉 楽天市場で「{search_keyword}」を見る",
+            rakuten_url,
+            use_container_width=True,
+            key=f"rakuten_btn_{key_suffix}",
+        )
 
 
 # =========================================================
@@ -307,7 +384,12 @@ with tab_record:
             if not st.session_state["user_id"]:
                 st.error("履歴を保存するため、先にサイドバーからログインをしてください。")
             elif not api_key:
-                st.error("Gemini APIキーを入力してください。")
+                if SHARED_GEMINI_KEY:
+                    st.error("本日の無料利用回数(共有キー)を使い切りました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。")
+                else:
+                    st.error("サイドバーの「自分のGemini API Keyを使う」欄にAPI Keyを入力してください。")
+            elif not user_api_key and today_usage >= DAILY_FREE_LIMIT:
+                st.error("本日の無料利用回数(共有キー)を使い切りました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。")
             elif not supabase:
                 st.error("Supabaseの設定が未完了です。")
             else:
@@ -373,6 +455,12 @@ with tab_record:
     if st.session_state["current_result"]:
         st.success("分析完了！保存されました。")
         st.markdown(st.session_state["current_result"])
+
+        nutrition = st.session_state.get("current_nutrition") or {}
+        suggested_keyword = suggest_shopping_keyword(
+            nutrition.get("protein", 0), nutrition.get("fat", 0), nutrition.get("carbs", 0)
+        )
+        render_shopping_links(suggested_keyword, key_suffix="record")
 
 # ---------------------------------------------------------
 # タブ2: ダッシュボード
@@ -489,46 +577,17 @@ with tab_history:
                         mime="text/csv",
                     )
 
-                # 不足栄養素の購入リンク (Amazon / 楽天)
-                st.markdown("---")
-                st.subheader("🛒 不足栄養素を購入する")
-                search_keyword = st.text_input("購入・検索したい健康食材", value="プロテイン")
-
-                col_amazon, col_rakuten = st.columns(2)
-
-                # 楽天アフィリエイトID: Secretsに設定があればそちらを優先。
-                # 未設定の場合のフォールバック値(ご自身のIDに変更・削除可)。
-                rakuten_id = (
-                    st.secrets.get("RAKUTEN_AFFILIATE_ID", "574c4fde.6cc334c0.574c4fdf.5d2c3a1a")
-                    if hasattr(st, "secrets")
-                    else "574c4fde.6cc334c0.574c4fdf.5d2c3a1a"
+                # 不足栄養素の購入リンク (Amazon / 楽天) — 今日の栄養バランスから提案
+                today_str = datetime.now().date()
+                today_rows = [
+                    r for r in rows if pd.to_datetime(r["created_at"]).date() == today_str
+                ]
+                suggested_keyword = suggest_shopping_keyword(
+                    sum(r.get("protein_g") or 0 for r in today_rows),
+                    sum(r.get("fat_g") or 0 for r in today_rows),
+                    sum(r.get("carbs_g") or 0 for r in today_rows),
                 )
-
-                with col_amazon:
-                    amazon_tag = (
-                        st.secrets.get("AMAZON_ASSOCIATE_ID", "your_id-22") if hasattr(st, "secrets") else "your_id-22"
-                    )
-                    amazon_params = {"k": str(search_keyword).strip(), "tag": amazon_tag}
-                    amazon_url = "https://www.amazon.co.jp/s?" + urllib.parse.urlencode(amazon_params)
-                    st.link_button(f"👉 Amazonで「{search_keyword}」を見る", amazon_url, use_container_width=True)
-
-                with col_rakuten:
-                    rakuten_search_url = (
-                        f"https://search.rakuten.co.jp/search/mall/{urllib.parse.quote(str(search_keyword).strip())}/"
-                    )
-                    if rakuten_id:
-                        encoded_target = urllib.parse.quote(rakuten_search_url, safe="")
-                        rakuten_url = (
-                            f"https://hb.afl.rakuten.co.jp/hgc/{rakuten_id}/?pc={encoded_target}&m={encoded_target}"
-                        )
-                    else:
-                        # アフィリエイトIDが未設定の場合は通常の検索リンク(成果報酬は発生しません)
-                        rakuten_url = rakuten_search_url
-                    st.link_button(f"👉 楽天市場で「{search_keyword}」を見る", rakuten_url, use_container_width=True)
-
-                # 楽天ジャンルマッチ商品リンク(自動おすすめスライドバナー)
-                st.caption("🎁 楽天のおすすめ商品")
-                render_rakuten_widget(rakuten_id)
+                render_shopping_links(suggested_keyword, key_suffix="history")
         except Exception as e:
             st.error(f"履歴データの取得に失敗しました: {e}")
 
