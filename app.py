@@ -12,8 +12,8 @@ from supabase import create_client, Client
 # =========================================================
 # 1. 画面の初期設定
 # =========================================================
-st.set_page_config(page_title="AI食事・健康管理アドバイザー", page_icon="🥗", layout="wide")
-st.title("🥗 AI食事・健康管理アドバイザー (ダッシュボード搭載版)")
+st.set_page_config(page_title="FitCompanion", page_icon="🍁", layout="wide")
+st.title("🍁 FitCompanion — AI食事・健康管理アドバイザー")
 st.info(
     "⚠️ 本アプリはAIによる簡易的な栄養アドバイスを提供するもので、医療的な診断・治療の代わりにはなりません。"
     "持病がある方や体調に不安がある方は、必ず医師・管理栄養士にご相談のうえご利用ください。"
