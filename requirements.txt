@@ -3,3 +3,4 @@ google-generativeai>=0.8
 supabase>=2.7
 Pillow>=10.0
 pandas>=2.2
+altair>=5.0
