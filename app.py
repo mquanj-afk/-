@@ -1,30 +1,288 @@
 import re
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pandas as pd
+import altair as alt
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 from supabase import create_client, Client
 
 # =========================================================
+# 0. 多言語テキスト (日本語 / ベトナム語)
+# =========================================================
+TEXTS = {
+    "ja": {
+        "app_caption": "AIが写真から栄養バランスを判定し、今日の食事に点数をつけます。",
+        "disclaimer": (
+            "⚠️ 本アプリはAIによる簡易的な栄養アドバイスを提供するもので、医療的な診断・治療の代わりにはなりません。"
+            "持病がある方や体調に不安がある方は、必ず医師・管理栄養士にご相談のうえご利用ください。"
+        ),
+        "lang_label": "🌐 言語",
+        "account_header": "🔑 アカウント",
+        "menu_login": "ログイン",
+        "menu_signup": "新規会員登録",
+        "email_label": "メールアドレス",
+        "password_label": "パスワード",
+        "create_account_btn": "アカウントを作成する",
+        "login_btn": "ログインする",
+        "logged_in": "🔒 ログイン中",
+        "logout_btn": "ログアウト",
+        "signup_success": "登録完了！「ログイン」に切り替えてログインしてください。",
+        "signup_error": "登録エラー: {e}",
+        "login_success": "ログイン成功！",
+        "login_fail": "ログインに失敗しました。",
+        "supabase_missing": "Supabaseの設定が未完了です。",
+        "email_pw_required": "メールアドレスとパスワードを両方正しく入力してください。",
+        "pw_too_short": "パスワードは6文字以上で入力してください。",
+        "profile_header": "👤 利用者プロフィール",
+        "profile_loaded": "✅ 保存済みプロフィールを読み込みました",
+        "profile_hint": "⚠️ 目標カロリーを正しく計算するため、下の項目を必ず入力してください👇",
+        "age_label": "年齢",
+        "gender_label": "性別",
+        "gender_options": ["男性", "女性", "その他"],
+        "height_label": "身長 (cm)",
+        "weight_label": "体重 (kg)",
+        "activity_label": "活動レベル",
+        "activity_options": ["低い(デスクワーク中心)", "普通(週2-3回運動)", "高い(毎日運動・肉体労働)"],
+        "illness_label": "持病・病気の有無",
+        "illness_options": ["なし", "あり"],
+        "illness_detail_label": "具体的な病名や制限項目",
+        "purpose_label": "目的",
+        "purpose_options": ["ダイエット（減量）", "現状維持", "バルクアップ（筋肥大）"],
+        "save_profile_btn": "💾 プロフィールを保存する(次回から自動入力)",
+        "profile_saved": "プロフィールを保存しました。次回ログイン時から自動入力されます。",
+        "target_calorie_label": "🎯 推定目標カロリー/日",
+        "gemini_key_expander": "🔑 自分のGemini API Keyを使う(任意・無制限)",
+        "gemini_key_caption": "何も入力しなければ、運営者の共有キーで1日{limit}回まで無料でお試しいただけます。もっと使いたい方だけ、ご自身のAPI Keyを入力してください。",
+        "gemini_key_label": "Gemini API Key",
+        "own_key_caption": "✅ ご自身のAPI Keyを使用します(無制限)",
+        "shared_key_caption": "🆓 共有キーを使用中(本日の残り: {remaining}/{limit}回)",
+        "tab_record": "📸 今日の記録",
+        "tab_history": "🗂️ 履歴",
+        "record_header": "食事を記録する",
+        "meal_type_label": "食事の区分",
+        "meal_types": ["朝食", "昼食", "夕食", "間食"],
+        "upload_label": "食事の写真をアップロードしてください...",
+        "analyze_btn": "エネルギー・栄養素を計算する",
+        "login_required": "履歴を保存するため、先にサイドバーからログインをしてください。",
+        "quota_exceeded": "本日の無料利用回数(共有キー)を使い切りました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。",
+        "own_key_required": "サイドバーの「自分のGemini API Keyを使う」欄にAPI Keyを入力してください。",
+        "analyzing": "AIが分析中...",
+        "quota_error": "⚠️ 現在、AI分析の無料利用回数の上限に達しています。しばらく時間をおいてから再度お試しいただくか、ご自身のGemini API Keyの利用状況・プランをご確認ください。",
+        "api_key_error": "⚠️ Gemini API Keyが正しくないか、無効になっている可能性があります。入力内容をご確認ください。",
+        "generic_error": "エラーが発生しました: {e}",
+        "record_success": "✅ {menu} を記録しました",
+        "login_prompt_record": "ログインすると、今日の記録とスコアがここに表示されます。",
+        "today_calorie_header": "🔥 今日のカロリー",
+        "col_target": "目標カロリー",
+        "col_consumed": "摂取済み",
+        "col_remaining": "残り",
+        "pfc_header": "⚖️ 今日のPFCバランス",
+        "col_gram": "グラム",
+        "col_kcal": "カロリー",
+        "col_percent": "割合",
+        "protein": "タンパク質",
+        "fat": "脂質",
+        "carbs": "炭水化物",
+        "micro_header": "🧪 食物繊維・塩分・ビタミンなど",
+        "micro_chart_y": "% (目安を100%として)",
+        "col_today_total": "今日の合計",
+        "col_guideline": "一般的な目安/日",
+        "fiber": "食物繊維",
+        "sodium": "塩分相当量",
+        "vitamin_c": "ビタミンC",
+        "vitamin_d": "ビタミンD",
+        "calcium": "カルシウム",
+        "iron": "鉄分",
+        "micro_caption": "※ AIによる画像からの概算値です。正確な栄養成分表示ではありません。",
+        "meal_score_header": "🍽️ 今日の食事とスコア",
+        "col_meal_type": "区分",
+        "col_menu": "メニュー",
+        "col_score": "スコア",
+        "final_score_label": "🏆 本日の最終スコア",
+        "current_score_label": "📊 現在のスコア(途中経過)",
+        "score_high_msg": "🎉 素晴らしい一日でした！このバランスを続けましょう。",
+        "score_mid_msg": "👍 まずまずのバランスでした。明日はもう少し野菜や食物繊維を意識してみましょう。",
+        "score_low_msg": "💪 明日はタンパク質・食物繊維・塩分のバランスを見直してみましょう。",
+        "score_caption": "夕食を記録すると、その日の最終スコアが確定します。",
+        "no_record_caption": "まだ今日の記録がありません。上のフォームから食事を記録してみましょう。",
+        "history_header": "🗂️ 食事履歴の一覧",
+        "history_login_prompt": "ログインすると、あなたの過去の食事履歴が表示されます。",
+        "no_history": "まだ保存された食事履歴はありません。",
+        "select_history_label": "過去の分析アドバイスを振り返る：",
+        "detail_header": "📄 {menu} の詳細分析",
+        "delete_btn": "🗑️ この記録を削除する",
+        "delete_success": "削除しました。",
+        "download_btn": "⬇️ 全履歴をCSVでダウンロード",
+        "history_error": "履歴データの取得に失敗しました: {e}",
+        "shopping_header": "🛒 不足栄養素を購入する",
+        "shopping_label": "購入・検索したい健康食材",
+        "amazon_btn": "👉 Amazonで「{kw}」を見る",
+        "rakuten_btn": "👉 楽天市場で「{kw}」を見る",
+        "policy_expander": "📜 本アプリの規約・プライバシーポリシー",
+        "policy_text": (
+            "当アプリは、ユーザー登録情報をSupabaseを介して保護し、許可なく第三者に開示することはありません。"
+            "Amazonアソシエイト・プログラム、楽天アフィリエイトの参加者です。"
+        ),
+        "status_low": "不足",
+        "status_ok": "適正",
+        "status_high": "過剰",
+        "ai_output_lang_instruction": "回答はすべて日本語で出力してください。",
+    },
+    "vi": {
+        "app_caption": "AI phân tích ảnh bữa ăn và chấm điểm cân bằng dinh dưỡng cho bạn mỗi ngày.",
+        "disclaimer": (
+            "⚠️ Ứng dụng này cung cấp lời khuyên dinh dưỡng đơn giản từ AI, không thay thế cho chẩn đoán "
+            "hoặc điều trị y tế. Nếu bạn có bệnh nền hoặc lo lắng về sức khỏe, vui lòng tham khảo ý kiến "
+            "bác sĩ hoặc chuyên gia dinh dưỡng trước khi sử dụng."
+        ),
+        "lang_label": "🌐 Ngôn ngữ",
+        "account_header": "🔑 Tài khoản",
+        "menu_login": "Đăng nhập",
+        "menu_signup": "Đăng ký mới",
+        "email_label": "Email",
+        "password_label": "Mật khẩu",
+        "create_account_btn": "Tạo tài khoản",
+        "login_btn": "Đăng nhập",
+        "logged_in": "🔒 Đã đăng nhập",
+        "logout_btn": "Đăng xuất",
+        "signup_success": "Đăng ký thành công! Vui lòng chuyển sang mục “Đăng nhập” để tiếp tục.",
+        "signup_error": "Lỗi đăng ký: {e}",
+        "login_success": "Đăng nhập thành công!",
+        "login_fail": "Đăng nhập thất bại.",
+        "supabase_missing": "Chưa thiết lập xong Supabase.",
+        "email_pw_required": "Vui lòng nhập đầy đủ và chính xác email và mật khẩu.",
+        "pw_too_short": "Mật khẩu phải có ít nhất 6 ký tự.",
+        "profile_header": "👤 Hồ sơ cá nhân",
+        "profile_loaded": "✅ Đã tải hồ sơ đã lưu",
+        "profile_hint": "⚠️ Vui lòng nhập đầy đủ thông tin bên dưới để tính calo mục tiêu chính xác👇",
+        "age_label": "Tuổi",
+        "gender_label": "Giới tính",
+        "gender_options": ["Nam", "Nữ", "Khác"],
+        "height_label": "Chiều cao (cm)",
+        "weight_label": "Cân nặng (kg)",
+        "activity_label": "Mức độ vận động",
+        "activity_options": ["Thấp (làm việc bàn giấy)", "Bình thường (2-3 lần/tuần)", "Cao (vận động/lao động mỗi ngày)"],
+        "illness_label": "Có bệnh nền không?",
+        "illness_options": ["Không", "Có"],
+        "illness_detail_label": "Tên bệnh hoặc hạn chế cụ thể",
+        "purpose_label": "Mục tiêu",
+        "purpose_options": ["Giảm cân", "Duy trì hiện tại", "Tăng cơ"],
+        "save_profile_btn": "💾 Lưu hồ sơ (tự động điền lần sau)",
+        "profile_saved": "Đã lưu hồ sơ. Lần đăng nhập sau sẽ tự động điền.",
+        "target_calorie_label": "🎯 Calo mục tiêu ước tính/ngày",
+        "gemini_key_expander": "🔑 Dùng API Key Gemini của riêng bạn (tùy chọn · không giới hạn)",
+        "gemini_key_caption": "Nếu để trống, bạn có thể dùng miễn phí {limit} lần/ngày bằng key dùng chung của quản trị viên. Nếu muốn dùng nhiều hơn, hãy nhập API Key của riêng bạn.",
+        "gemini_key_label": "Gemini API Key",
+        "own_key_caption": "✅ Đang dùng API Key riêng của bạn (không giới hạn)",
+        "shared_key_caption": "🆓 Đang dùng key dùng chung (còn lại hôm nay: {remaining}/{limit} lần)",
+        "tab_record": "📸 Ghi lại hôm nay",
+        "tab_history": "🗂️ Lịch sử",
+        "record_header": "Ghi lại bữa ăn",
+        "meal_type_label": "Loại bữa ăn",
+        "meal_types": ["Bữa sáng", "Bữa trưa", "Bữa tối", "Ăn vặt"],
+        "upload_label": "Vui lòng tải ảnh bữa ăn lên...",
+        "analyze_btn": "Tính năng lượng & dinh dưỡng",
+        "login_required": "Vui lòng đăng nhập ở thanh bên trước để lưu lịch sử.",
+        "quota_exceeded": "Bạn đã dùng hết số lần miễn phí hôm nay (key dùng chung). Vui lòng thử lại vào ngày mai, hoặc nhập API Key riêng của bạn ở thanh bên.",
+        "own_key_required": "Vui lòng nhập API Key vào mục “Dùng API Key Gemini của riêng bạn” ở thanh bên.",
+        "analyzing": "AI đang phân tích...",
+        "quota_error": "⚠️ Đã đạt giới hạn số lần phân tích miễn phí hôm nay. Vui lòng thử lại sau, hoặc kiểm tra gói/API Key Gemini của bạn.",
+        "api_key_error": "⚠️ API Key Gemini không đúng hoặc không hợp lệ. Vui lòng kiểm tra lại.",
+        "generic_error": "Đã xảy ra lỗi: {e}",
+        "record_success": "✅ Đã ghi lại: {menu}",
+        "login_prompt_record": "Đăng nhập để xem ghi chép và điểm số hôm nay tại đây.",
+        "today_calorie_header": "🔥 Calo hôm nay",
+        "col_target": "Mục tiêu",
+        "col_consumed": "Đã nạp",
+        "col_remaining": "Còn lại",
+        "pfc_header": "⚖️ Cân bằng PFC hôm nay",
+        "col_gram": "Gram",
+        "col_kcal": "Calo",
+        "col_percent": "Tỷ lệ",
+        "protein": "Chất đạm",
+        "fat": "Chất béo",
+        "carbs": "Tinh bột/đường",
+        "micro_header": "🧪 Chất xơ · Muối · Vitamin",
+        "micro_chart_y": "% (so với khuyến nghị = 100%)",
+        "col_today_total": "Tổng hôm nay",
+        "col_guideline": "Khuyến nghị/ngày",
+        "fiber": "Chất xơ",
+        "sodium": "Muối (quy đổi)",
+        "vitamin_c": "Vitamin C",
+        "vitamin_d": "Vitamin D",
+        "calcium": "Canxi",
+        "iron": "Sắt",
+        "micro_caption": "※ Đây là số liệu ước tính từ AI dựa trên hình ảnh, không phải thông tin dinh dưỡng chính xác.",
+        "meal_score_header": "🍽️ Bữa ăn & điểm số hôm nay",
+        "col_meal_type": "Loại",
+        "col_menu": "Món ăn",
+        "col_score": "Điểm",
+        "final_score_label": "🏆 Điểm cuối cùng hôm nay",
+        "current_score_label": "📊 Điểm hiện tại (đang cập nhật)",
+        "score_high_msg": "🎉 Hôm nay bạn ăn rất cân bằng! Hãy duy trì nhé.",
+        "score_mid_msg": "👍 Khá ổn. Ngày mai hãy ăn thêm rau và chất xơ nhé.",
+        "score_low_msg": "💪 Ngày mai hãy chú ý cân bằng đạm, chất xơ và lượng muối nhé.",
+        "score_caption": "Điểm cuối cùng sẽ được chốt sau khi bạn ghi lại bữa tối.",
+        "no_record_caption": "Chưa có ghi chép nào hôm nay. Hãy bắt đầu ghi lại bữa ăn ở trên nhé.",
+        "history_header": "🗂️ Lịch sử bữa ăn",
+        "history_login_prompt": "Đăng nhập để xem lịch sử bữa ăn trước đây của bạn.",
+        "no_history": "Chưa có lịch sử nào được lưu.",
+        "select_history_label": "Xem lại phân tích trước đây:",
+        "detail_header": "📄 Phân tích chi tiết: {menu}",
+        "delete_btn": "🗑️ Xóa ghi chép này",
+        "delete_success": "Đã xóa.",
+        "download_btn": "⬇️ Tải toàn bộ lịch sử (CSV)",
+        "history_error": "Không thể tải dữ liệu lịch sử: {e}",
+        "shopping_header": "🛒 Mua thêm dưỡng chất còn thiếu",
+        "shopping_label": "Từ khóa thực phẩm chức năng muốn tìm",
+        "amazon_btn": "👉 Xem trên Amazon: “{kw}”",
+        "rakuten_btn": "👉 Xem trên Rakuten: “{kw}”",
+        "policy_expander": "📜 Điều khoản & Chính sách bảo mật",
+        "policy_text": (
+            "Ứng dụng này bảo vệ thông tin đăng ký của người dùng thông qua Supabase và không tiết lộ "
+            "cho bên thứ ba khi chưa được phép. Ứng dụng tham gia chương trình Amazon Associates và "
+            "Rakuten Affiliate."
+        ),
+        "status_low": "Thiếu",
+        "status_ok": "Đủ",
+        "status_high": "Dư",
+        "ai_output_lang_instruction": "Hãy trả lời toàn bộ bằng tiếng Việt.",
+    },
+}
+
+# =========================================================
 # 1. 画面の初期設定
 # =========================================================
 st.set_page_config(page_title="FitCompanion", page_icon="🍁", layout="wide")
-st.title("🍁 FitCompanion")
-st.caption("AIが写真から栄養バランスを判定し、今日の食事に点数をつけます。")
-st.info(
-    "⚠️ 本アプリはAIによる簡易的な栄養アドバイスを提供するもので、医療的な診断・治療の代わりにはなりません。"
-    "持病がある方や体調に不安がある方は、必ず医師・管理栄養士にご相談のうえご利用ください。"
+
+# Streamlit標準の「Deploy」ボタン・GitHubアイコンは .streamlit/config.toml (toolbarMode="minimal")
+# で非表示にしている。ここではフッターの「Made with Streamlit」表記も非表示にする。
+st.markdown("<style>footer {visibility: hidden;}</style>", unsafe_allow_html=True)
+
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "ja"
+
+lang_choice = st.sidebar.radio(
+    TEXTS["ja"]["lang_label"] + " / " + TEXTS["vi"]["lang_label"],
+    ["日本語", "Tiếng Việt"],
+    index=0 if st.session_state["lang"] == "ja" else 1,
 )
+st.session_state["lang"] = "ja" if lang_choice == "日本語" else "vi"
+T = TEXTS[st.session_state["lang"]]
+
+st.title("🍁 FitCompanion")
+st.caption(T["app_caption"])
+st.info(T["disclaimer"])
 
 # --- 🔐 SUPABASEの設定 ---
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
-    st.sidebar.warning("⚠️ Secretsが未設定です。下に直接入力してください(本番運用ではsecrets.tomlを使用推奨)。")
+    st.sidebar.warning("⚠️ Secretsが未設定です。下に直接入力してください。")
     SUPABASE_URL = st.sidebar.text_input("Supabase URL", value="")
     SUPABASE_KEY = st.sidebar.text_input("Supabase Key", value="", type="password")
 
@@ -41,7 +299,6 @@ if SUPABASE_URL and SUPABASE_KEY:
     except Exception:
         st.error("Supabaseの初期設定エラーです。URLとKeyを確認してください。")
 
-# セッション状態の初期化
 for key, default in {
     "user_id": None,
     "current_result": None,
@@ -79,48 +336,48 @@ def save_profile(user_id: str, profile_data: dict) -> bool:
 # =========================================================
 # 2. 🔐 会員登録・ログインシステム
 # =========================================================
-st.sidebar.header("🔑 アカウント")
+st.sidebar.header(T["account_header"])
 
 if st.session_state["user_id"] is None:
-    auth_action = st.sidebar.radio("メニュー", ["ログイン", "新規会員登録"])
-    email = st.sidebar.text_input("メールアドレス")
-    password = st.sidebar.text_input("パスワード", type="password")
+    auth_action = st.sidebar.radio("メニュー", [T["menu_login"], T["menu_signup"]])
+    email = st.sidebar.text_input(T["email_label"])
+    password = st.sidebar.text_input(T["password_label"], type="password")
 
-    if auth_action == "新規会員登録":
-        if st.sidebar.button("アカウントを作成する"):
+    if auth_action == T["menu_signup"]:
+        if st.sidebar.button(T["create_account_btn"]):
             if not supabase:
-                st.sidebar.error("Supabaseの設定が未完了です。")
+                st.sidebar.error(T["supabase_missing"])
             elif not email.strip() or not password.strip():
-                st.sidebar.error("メールアドレスとパスワードを両方正しく入力してください。")
+                st.sidebar.error(T["email_pw_required"])
             elif len(password.strip()) < 6:
-                st.sidebar.error("パスワードは6文字以上で入力してください。")
+                st.sidebar.error(T["pw_too_short"])
             else:
                 try:
                     res = supabase.auth.sign_up({"email": email.strip(), "password": password.strip()})
                     if res.user:
-                        st.sidebar.success("登録完了！「ログイン」に切り替えてログインしてください。")
+                        st.sidebar.success(T["signup_success"])
                 except Exception as e:
-                    st.sidebar.error(f"登録エラー: {e}")
+                    st.sidebar.error(T["signup_error"].format(e=e))
 
-    elif auth_action == "ログイン":
-        if st.sidebar.button("ログインする"):
+    elif auth_action == T["menu_login"]:
+        if st.sidebar.button(T["login_btn"]):
             if not supabase:
-                st.sidebar.error("Supabaseの設定が未完了です。")
+                st.sidebar.error(T["supabase_missing"])
             elif not email.strip() or not password.strip():
-                st.sidebar.error("アドレスとパスワードを入力してください。")
+                st.sidebar.error(T["email_pw_required"])
             else:
                 try:
                     res = supabase.auth.sign_in_with_password({"email": email.strip(), "password": password.strip()})
                     if res.user:
                         st.session_state["user_id"] = res.user.id
                         st.session_state["profile"] = load_profile(res.user.id)
-                        st.sidebar.success("ログイン成功！")
+                        st.sidebar.success(T["login_success"])
                         st.rerun()
                 except Exception:
-                    st.sidebar.error("ログインに失敗しました。")
+                    st.sidebar.error(T["login_fail"])
 else:
-    st.sidebar.success("🔒 ログイン中")
-    if st.sidebar.button("ログアウト"):
+    st.sidebar.success(T["logged_in"])
+    if st.sidebar.button(T["logout_btn"]):
         st.session_state["user_id"] = None
         st.session_state["current_result"] = None
         st.session_state["current_nutrition"] = None
@@ -131,45 +388,48 @@ else:
         st.session_state["profile"] = load_profile(st.session_state["user_id"])
 
 # =========================================================
-# 3. 👤 プロフィール入力欄 (2回目以降は保存済みの内容を自動入力)
+# 3. 👤 プロフィール入力欄 (強調表示・2回目以降は自動入力)
 # =========================================================
-st.sidebar.header("👤 利用者プロフィール")
-
 saved_profile = st.session_state.get("profile") or {}
-if saved_profile:
-    st.sidebar.caption("✅ 保存済みプロフィールを読み込みました")
 
-gender_options = ["男性", "女性", "その他"]
-activity_options = ["低い(デスクワーク中心)", "普通(週2-3回運動)", "高い(毎日運動・肉体労働)"]
-illness_options = ["なし", "あり"]
-purpose_options = ["ダイエット（減量）", "現状維持", "バルクアップ（筋肥大）"]
+profile_box = st.sidebar.container(border=True)
+profile_box.subheader(T["profile_header"])
+if saved_profile:
+    profile_box.caption(T["profile_loaded"])
+else:
+    profile_box.warning(T["profile_hint"])
+
+gender_options = T["gender_options"]
+activity_options = T["activity_options"]
+illness_options = T["illness_options"]
+purpose_options = T["purpose_options"]
 
 
 def _idx(options, value, fallback=0):
     return options.index(value) if value in options else fallback
 
 
-age = st.sidebar.number_input("年齢", min_value=1, max_value=120, value=int(saved_profile.get("age", 30)))
-gender = st.sidebar.selectbox("性別", gender_options, index=_idx(gender_options, saved_profile.get("gender")))
-height = st.sidebar.number_input(
-    "身長 (cm)", min_value=50.0, max_value=250.0, value=float(saved_profile.get("height", 170.0)), step=0.1
+age = profile_box.number_input(T["age_label"], min_value=1, max_value=120, value=int(saved_profile.get("age", 30)))
+gender = profile_box.selectbox(T["gender_label"], gender_options, index=_idx(gender_options, saved_profile.get("gender")))
+height = profile_box.number_input(
+    T["height_label"], min_value=50.0, max_value=250.0, value=float(saved_profile.get("height", 170.0)), step=0.1
 )
-weight = st.sidebar.number_input(
-    "体重 (kg)", min_value=10.0, max_value=300.0, value=float(saved_profile.get("weight", 65.0)), step=0.1
+weight = profile_box.number_input(
+    T["weight_label"], min_value=10.0, max_value=300.0, value=float(saved_profile.get("weight", 65.0)), step=0.1
 )
-activity_level = st.sidebar.selectbox(
-    "活動レベル", activity_options, index=_idx(activity_options, saved_profile.get("activity_level"), fallback=1)
+activity_level = profile_box.selectbox(
+    T["activity_label"], activity_options, index=_idx(activity_options, saved_profile.get("activity_level"), fallback=1)
 )
-has_illness = st.sidebar.radio(
-    "持病・病気の有無", illness_options, index=_idx(illness_options, saved_profile.get("has_illness"))
+has_illness = profile_box.radio(
+    T["illness_label"], illness_options, index=_idx(illness_options, saved_profile.get("has_illness"))
 )
 illness_detail = ""
-if has_illness == "あり":
-    illness_detail = st.sidebar.text_input("具体的な病名や制限項目", value=saved_profile.get("illness_detail", ""))
-purpose = st.sidebar.selectbox("目的", purpose_options, index=_idx(purpose_options, saved_profile.get("purpose")))
+if has_illness == illness_options[1]:
+    illness_detail = profile_box.text_input(T["illness_detail_label"], value=saved_profile.get("illness_detail", ""))
+purpose = profile_box.selectbox(T["purpose_label"], purpose_options, index=_idx(purpose_options, saved_profile.get("purpose")))
 
 if st.session_state["user_id"]:
-    if st.sidebar.button("💾 プロフィールを保存する(次回から自動入力)"):
+    if profile_box.button(T["save_profile_btn"]):
         new_profile = {
             "age": age,
             "gender": gender,
@@ -182,48 +442,43 @@ if st.session_state["user_id"]:
         }
         if save_profile(st.session_state["user_id"], new_profile):
             st.session_state["profile"] = {**new_profile, "user_id": st.session_state["user_id"]}
-            st.sidebar.success("プロフィールを保存しました。次回ログイン時から自動入力されます。")
+            profile_box.success(T["profile_saved"])
 
 
 # =========================================================
 # 4. 目標カロリーの計算 (ミフリン・セントジョール式)
 # =========================================================
 def calc_target_calories(age, gender, height, weight, activity_level, purpose):
-    if gender == "男性":
+    if gender == gender_options[0]:  # 男性 / Nam
         bmr = 10 * weight + 6.25 * height - 5 * age + 5
-    elif gender == "女性":
+    elif gender == gender_options[1]:  # 女性 / Nữ
         bmr = 10 * weight + 6.25 * height - 5 * age - 161
     else:
         bmr = 10 * weight + 6.25 * height - 5 * age - 78
 
-    activity_factor = {
-        "低い(デスクワーク中心)": 1.375,
-        "普通(週2-3回運動)": 1.55,
-        "高い(毎日運動・肉体労働)": 1.725,
-    }[activity_level]
+    activity_factor_map = {activity_options[0]: 1.375, activity_options[1]: 1.55, activity_options[2]: 1.725}
+    activity_factor = activity_factor_map.get(activity_level, 1.55)
 
     tdee = bmr * activity_factor
-    if purpose == "ダイエット（減量）":
+    if purpose == purpose_options[0]:  # ダイエット / Giảm cân
         return tdee - 500
-    elif purpose == "バルクアップ（筋肥大）":
+    elif purpose == purpose_options[2]:  # バルクアップ / Tăng cơ
         return tdee + 300
     return tdee
 
 
 target_calories = calc_target_calories(age, gender, height, weight, activity_level, purpose)
-st.sidebar.metric("🎯 推定目標カロリー/日", f"{target_calories:.0f} kcal")
+st.sidebar.metric(T["target_calorie_label"], f"{target_calories:.0f} kcal")
 
 
 # =========================================================
 # 5. AI利用: 運営者の共有キー(1日の無料回数あり) + 自分のキー(無制限)
 # =========================================================
 DAILY_FREE_LIMIT = 5
-
 SHARED_GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
 
 
 def get_today_rows(user_id: str) -> list:
-    """今日ぶんの食事履歴を、数値カラムの欠損を0で埋めて返す。"""
     if not supabase or not user_id:
         return []
     today_start = datetime.now().strftime("%Y-%m-%dT00:00:00")
@@ -247,7 +502,7 @@ def get_today_rows(user_id: str) -> list:
     for row in rows:
         for col in numeric_cols:
             row[col] = row.get(col) or 0.0
-        row["meal_type"] = row.get("meal_type") or "食事"
+        row["meal_type"] = row.get("meal_type") or "-"
     return rows
 
 
@@ -255,19 +510,16 @@ today_rows = get_today_rows(st.session_state["user_id"]) if st.session_state["us
 today_usage = len(today_rows)
 remaining_free = max(0, DAILY_FREE_LIMIT - today_usage)
 
-with st.sidebar.expander("🔑 自分のGemini API Keyを使う(任意・無制限)", expanded=False):
-    st.caption(
-        f"何も入力しなければ、運営者の共有キーで1日{DAILY_FREE_LIMIT}回まで無料でお試しいただけます。"
-        "もっと使いたい方だけ、ご自身のAPI Keyを入力してください。"
-    )
-    user_api_key = st.text_input("Gemini API Key", type="password", key="user_gemini_key")
+with st.sidebar.expander(T["gemini_key_expander"], expanded=False):
+    st.caption(T["gemini_key_caption"].format(limit=DAILY_FREE_LIMIT))
+    user_api_key = st.text_input(T["gemini_key_label"], type="password", key="user_gemini_key")
 
 if user_api_key:
     api_key = user_api_key
-    st.sidebar.caption("✅ ご自身のAPI Keyを使用します(無制限)")
+    st.sidebar.caption(T["own_key_caption"])
 elif SHARED_GEMINI_KEY and st.session_state["user_id"]:
     api_key = SHARED_GEMINI_KEY
-    st.sidebar.caption(f"🆓 共有キーを使用中(本日の残り: {remaining_free}/{DAILY_FREE_LIMIT}回)")
+    st.sidebar.caption(T["shared_key_caption"].format(remaining=remaining_free, limit=DAILY_FREE_LIMIT))
 else:
     api_key = ""
 
@@ -282,11 +534,11 @@ def extract_number(label: str, text: str) -> float:
 
 def extract_menu_name(text: str) -> str:
     match = re.search(r"メニュー名\**[:：]\s*(.+)", text)
-    return match.group(1).strip() if match else "不明な料理"
+    return match.group(1).strip() if match else "-"
 
 
 def extract_advice(text: str) -> str:
-    match = re.search(r"###\s*📝\s*アドバイス\s*(.+)", text, re.S)
+    match = re.search(r"###\s*📝[^\n]*\n(.+)", text, re.S)
     return match.group(1).strip() if match else text.strip()
 
 
@@ -307,19 +559,15 @@ def parse_nutrition(text: str) -> dict:
     }
 
 
-def calculate_meal_score(protein_g: float, fat_g: float, carbs_g: float, fiber_g: float, sodium_g: float) -> float:
-    """1食ぶんの栄養バランスを0〜100点の簡易スコアにする。
-    PFC比率が理想(P18% F25% C57%)に近いほど高得点、食物繊維はボーナス、塩分過多は減点。"""
+def calculate_meal_score(protein_g, fat_g, carbs_g, fiber_g, sodium_g) -> float:
     total_kcal = protein_g * 4 + fat_g * 9 + carbs_g * 4
     if total_kcal <= 0:
         return 50.0
-
     p_ratio = protein_g * 4 / total_kcal
     f_ratio = fat_g * 9 / total_kcal
     c_ratio = carbs_g * 4 / total_kcal
     ideal = {"p": 0.18, "f": 0.25, "c": 0.57}
     deviation = abs(p_ratio - ideal["p"]) + abs(f_ratio - ideal["f"]) + abs(c_ratio - ideal["c"])
-
     score = 100 - deviation * 150
     if fiber_g >= 3:
         score += 5
@@ -328,28 +576,35 @@ def calculate_meal_score(protein_g: float, fat_g: float, carbs_g: float, fiber_g
     return max(0, min(100, score))
 
 
-def suggest_shopping_keyword(protein_g: float, fat_g: float, carbs_g: float) -> str:
+def suggest_shopping_keyword(protein_g, fat_g, carbs_g) -> str:
     total_kcal = protein_g * 4 + fat_g * 9 + carbs_g * 4
     if total_kcal <= 0:
-        return "マルチビタミン"
+        return "マルチビタミン" if st.session_state["lang"] == "ja" else "Vitamin tổng hợp"
     protein_ratio = (protein_g * 4) / total_kcal
     fat_ratio = (fat_g * 9) / total_kcal
     carbs_ratio = (carbs_g * 4) / total_kcal
-    if protein_ratio < 0.13:
-        return "プロテイン"
-    if fat_ratio < 0.15:
-        return "オメガ3 DHA EPA サプリ"
-    if carbs_ratio > 0.70:
-        return "食物繊維 サプリ"
-    return "マルチビタミン"
+    if st.session_state["lang"] == "ja":
+        if protein_ratio < 0.13:
+            return "プロテイン"
+        if fat_ratio < 0.15:
+            return "オメガ3 DHA EPA サプリ"
+        if carbs_ratio > 0.70:
+            return "食物繊維 サプリ"
+        return "マルチビタミン"
+    else:
+        if protein_ratio < 0.13:
+            return "Whey protein"
+        if fat_ratio < 0.15:
+            return "Omega 3 DHA EPA"
+        if carbs_ratio > 0.70:
+            return "Chất xơ bổ sung"
+        return "Vitamin tổng hợp"
 
 
 def render_shopping_links(default_keyword: str, key_suffix: str):
     st.markdown("---")
-    st.subheader("🛒 不足栄養素を購入する")
-    search_keyword = st.text_input(
-        "購入・検索したい健康食材", value=default_keyword, key=f"search_kw_{key_suffix}"
-    )
+    st.subheader(T["shopping_header"])
+    search_keyword = st.text_input(T["shopping_label"], value=default_keyword, key=f"search_kw_{key_suffix}")
 
     amazon_tag = st.secrets.get("AMAZON_ASSOCIATE_ID", "your_id-22") if hasattr(st, "secrets") else "your_id-22"
     rakuten_id = st.secrets.get("RAKUTEN_AFFILIATE_ID", "") if hasattr(st, "secrets") else ""
@@ -358,25 +613,52 @@ def render_shopping_links(default_keyword: str, key_suffix: str):
     with col_amazon:
         amazon_params = {"k": str(search_keyword).strip(), "tag": amazon_tag}
         amazon_url = "https://www.amazon.co.jp/s?" + urllib.parse.urlencode(amazon_params)
-        st.link_button(
-            f"👉 Amazonで「{search_keyword}」を見る", amazon_url, use_container_width=True, key=f"amazon_btn_{key_suffix}"
-        )
+        st.link_button(T["amazon_btn"].format(kw=search_keyword), amazon_url, use_container_width=True, key=f"amazon_btn_{key_suffix}")
     with col_rakuten:
-        rakuten_search_url = (
-            f"https://search.rakuten.co.jp/search/mall/{urllib.parse.quote(str(search_keyword).strip())}/"
-        )
+        rakuten_search_url = f"https://search.rakuten.co.jp/search/mall/{urllib.parse.quote(str(search_keyword).strip())}/"
         if rakuten_id:
             encoded_target = urllib.parse.quote(rakuten_search_url, safe="")
             rakuten_url = f"https://hb.afl.rakuten.co.jp/hgc/{rakuten_id}/?pc={encoded_target}&m={encoded_target}"
         else:
             rakuten_url = rakuten_search_url
-        st.link_button(
-            f"👉 楽天市場で「{search_keyword}」を見る", rakuten_url, use_container_width=True, key=f"rakuten_btn_{key_suffix}"
-        )
+        st.link_button(T["rakuten_btn"].format(kw=search_keyword), rakuten_url, use_container_width=True, key=f"rakuten_btn_{key_suffix}")
+
+
+# もみじテーマに合わせた状態カラー(不足=オレンジ, 適正=緑, 過剰=濃いピンク赤)
+STATUS_COLORS = {"low": "#F2A65A", "ok": "#6FAE8C", "high": "#D9455F"}
+
+
+def classify_status(value: float, low: float, high: float) -> str:
+    """value が low未満なら'low'(不足)、high超なら'high'(過剰)、それ以外は'ok'(適正)。"""
+    if value < low:
+        return "low"
+    if value > high:
+        return "high"
+    return "ok"
+
+
+def render_status_bar_chart(df: pd.DataFrame, y_title: str):
+    """df は列 [nutrient, value, status_code, status_label] を持つ前提。
+    色分けされた棒グラフ+値ラベルを描画する。"""
+    color_scale = alt.Scale(domain=["low", "ok", "high"], range=[STATUS_COLORS["low"], STATUS_COLORS["ok"], STATUS_COLORS["high"]])
+    base = alt.Chart(df).encode(x=alt.X("nutrient:N", title=None, sort=None))
+    bars = base.mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, size=45).encode(
+        y=alt.Y("value:Q", title=y_title),
+        color=alt.Color("status_code:N", scale=color_scale, legend=alt.Legend(title=None, labelExpr="datum.label")),
+        tooltip=[alt.Tooltip("nutrient:N", title=""), alt.Tooltip("value:Q", title=y_title, format=".1f"), alt.Tooltip("status_label:N", title="")],
+    )
+    labels = base.mark_text(dy=-10, fontSize=12).encode(y="value:Q", text=alt.Text("value:Q", format=".0f"))
+    st.altair_chart((bars + labels).properties(height=260), use_container_width=True)
+
+    # 凡例代わりの状態一覧をテキストで補足(色覚に依存しないため)
+    legend_line = "　".join(
+        f"🟠{T['status_low']}" if code == "low" else (f"🟢{T['status_ok']}" if code == "ok" else f"🔴{T['status_high']}")
+        for code in ["low", "ok", "high"]
+    )
+    st.caption(legend_line)
 
 
 def render_today_tables(rows: list, target_calories: float):
-    """今日のカロリー表・PFC表・微量栄養素表・食事一覧+スコアを描画する。"""
     total_calories = sum(r["calories_num"] for r in rows)
     total_protein = sum(r["protein_g"] for r in rows)
     total_fat = sum(r["fat_g"] for r in rows)
@@ -388,57 +670,60 @@ def render_today_tables(rows: list, target_calories: float):
     total_ca = sum(r["calcium_mg"] for r in rows)
     total_fe = sum(r["iron_mg"] for r in rows)
 
-    # --- カロリー表 ---
-    st.subheader("🔥 今日のカロリー")
+    st.subheader(T["today_calorie_header"])
     df_cal = pd.DataFrame(
         {
-            "目標カロリー": [f"{target_calories:.0f} kcal"],
-            "摂取済み": [f"{total_calories:.0f} kcal"],
-            "残り": [f"{target_calories - total_calories:+.0f} kcal"],
+            T["col_target"]: [f"{target_calories:.0f} kcal"],
+            T["col_consumed"]: [f"{total_calories:.0f} kcal"],
+            T["col_remaining"]: [f"{target_calories - total_calories:+.0f} kcal"],
         }
     )
-    st.table(df_cal.T.rename(columns={0: "値"}))
+    st.table(df_cal.T.rename(columns={0: "-"}))
 
-    # --- PFCバランス表 ---
-    st.subheader("⚖️ 今日のPFCバランス")
-    pfc_kcal = {"タンパク質": total_protein * 4, "脂質": total_fat * 9, "炭水化物": total_carbs * 4}
+    st.subheader(T["pfc_header"])
+    pfc_kcal = {T["protein"]: total_protein * 4, T["fat"]: total_fat * 9, T["carbs"]: total_carbs * 4}
     total_pfc_kcal = sum(pfc_kcal.values()) or 1
-    df_pfc = pd.DataFrame(
-        {
-            "グラム": [f"{total_protein:.0f} g", f"{total_fat:.0f} g", f"{total_carbs:.0f} g"],
-            "カロリー": [f"{pfc_kcal['タンパク質']:.0f} kcal", f"{pfc_kcal['脂質']:.0f} kcal", f"{pfc_kcal['炭水化物']:.0f} kcal"],
-            "割合": [
-                f"{pfc_kcal['タンパク質']/total_pfc_kcal*100:.0f}%",
-                f"{pfc_kcal['脂質']/total_pfc_kcal*100:.0f}%",
-                f"{pfc_kcal['炭水化物']/total_pfc_kcal*100:.0f}%",
-            ],
-        },
-        index=["タンパク質", "脂質", "炭水化物"],
-    )
-    st.table(df_pfc)
+    # 一般的な推奨PFC比率(%): タンパク質13-20 / 脂質20-30 / 炭水化物50-65
+    pfc_ranges = {T["protein"]: (13, 20), T["fat"]: (20, 30), T["carbs"]: (50, 65)}
+    pfc_rows = []
+    for name, kcal in pfc_kcal.items():
+        pct = kcal / total_pfc_kcal * 100
+        low, high = pfc_ranges[name]
+        code = classify_status(pct, low, high)
+        pfc_rows.append({"nutrient": name, "value": pct, "status_code": code, "status_label": T[f"status_{code}"]})
+    render_status_bar_chart(pd.DataFrame(pfc_rows), y_title="%")
 
-    # --- 微量栄養素表 ---
-    st.subheader("🧪 食物繊維・塩分・ビタミンなど")
+    st.subheader(T["micro_header"])
+    # (名前, 値, 不足判定の下限, 過剰判定の上限, 目安値=グラフの100%基準)
+    micro_specs = [
+        (T["fiber"], total_fiber, 18, 40, 18),
+        (T["sodium"], total_sodium, 0, 7.5, 7.5),
+        (T["vitamin_c"], total_vc, 75, 2000, 100),
+        (T["vitamin_d"], total_vd, 5.5, 100, 8.5),
+        (T["calcium"], total_ca, 600, 2500, 700),
+        (T["iron"], total_fe, 6, 40, 7.5),
+    ]
+    micro_rows = []
+    for name, value, low, high, target in micro_specs:
+        code = classify_status(value, low, high)
+        pct = (value / target * 100) if target else 0
+        micro_rows.append({"nutrient": name, "value": pct, "status_code": code, "status_label": T[f"status_{code}"]})
+    render_status_bar_chart(pd.DataFrame(micro_rows), y_title=T["micro_chart_y"])
+
     df_micro = pd.DataFrame(
         {
-            "今日の合計": [
-                f"{total_fiber:.1f} g",
-                f"{total_sodium:.1f} g",
-                f"{total_vc:.0f} mg",
-                f"{total_vd:.1f} µg",
-                f"{total_ca:.0f} mg",
-                f"{total_fe:.1f} mg",
+            T["col_today_total"]: [
+                f"{total_fiber:.1f} g", f"{total_sodium:.1f} g", f"{total_vc:.0f} mg",
+                f"{total_vd:.1f} µg", f"{total_ca:.0f} mg", f"{total_fe:.1f} mg",
             ],
-            "一般的な目安/日": ["18〜20g", "7.5g未満", "100mg", "8.5µg", "650〜800mg", "7〜7.5mg"],
         },
-        index=["食物繊維", "塩分相当量", "ビタミンC", "ビタミンD", "カルシウム", "鉄分"],
+        index=[T["fiber"], T["sodium"], T["vitamin_c"], T["vitamin_d"], T["calcium"], T["iron"]],
     )
-    st.table(df_micro)
-    st.caption("※ AIによる画像からの概算値です。正確な栄養成分表示ではありません。")
+    st.table(df_micro.T)
+    st.caption(T["micro_caption"])
 
-    # --- 食事一覧+スコア ---
     if rows:
-        st.subheader("🍽️ 今日の食事とスコア")
+        st.subheader(T["meal_score_header"])
         meal_list = []
         scores = []
         for r in rows:
@@ -446,65 +731,62 @@ def render_today_tables(rows: list, target_calories: float):
             scores.append(score)
             meal_list.append(
                 {
-                    "区分": r["meal_type"],
-                    "メニュー": r.get("menu_name", ""),
-                    "カロリー": f"{r['calories_num']:.0f} kcal",
-                    "スコア": f"{score:.0f}点",
+                    T["col_meal_type"]: r["meal_type"],
+                    T["col_menu"]: r.get("menu_name", ""),
+                    T["col_kcal"]: f"{r['calories_num']:.0f} kcal",
+                    T["col_score"]: f"{score:.0f}",
                 }
             )
         st.table(pd.DataFrame(meal_list))
 
         avg_score = sum(scores) / len(scores)
-        has_dinner = any(r["meal_type"] == "夕食" for r in rows)
+        has_dinner = any(r["meal_type"] == T["meal_types"][2] for r in rows)
 
         if has_dinner:
             if avg_score >= 80:
-                message = "🎉 素晴らしい一日でした！このバランスを続けましょう。"
+                message = T["score_high_msg"]
             elif avg_score >= 60:
-                message = "👍 まずまずのバランスでした。明日はもう少し野菜や食物繊維を意識してみましょう。"
+                message = T["score_mid_msg"]
             else:
-                message = "💪 明日はタンパク質・食物繊維・塩分のバランスを見直してみましょう。"
-            st.metric("🏆 本日の最終スコア", f"{avg_score:.0f} 点")
+                message = T["score_low_msg"]
+            st.metric(T["final_score_label"], f"{avg_score:.0f}")
             st.success(message)
         else:
-            st.metric("📊 現在のスコア(途中経過)", f"{avg_score:.0f} 点")
-            st.caption("夕食を記録すると、その日の最終スコアが確定します。")
+            st.metric(T["current_score_label"], f"{avg_score:.0f}")
+            st.caption(T["score_caption"])
     else:
-        st.caption("まだ今日の記録がありません。上のフォームから食事を記録してみましょう。")
+        st.caption(T["no_record_caption"])
 
 
 # =========================================================
 # 7. メイン画面
 # =========================================================
-tab_record, tab_history = st.tabs(["📸 今日の記録", "🗂️ 履歴"])
+tab_record, tab_history = st.tabs([T["tab_record"], T["tab_history"]])
 
 # ---------------------------------------------------------
 # タブ1: 今日の記録
 # ---------------------------------------------------------
 with tab_record:
-    st.header("食事を記録する")
+    st.header(T["record_header"])
 
-    meal_type = st.selectbox("食事の区分", ["朝食", "昼食", "夕食", "間食"])
-    uploaded_file = st.file_uploader("食事の写真をアップロードしてください...", type=["jpg", "jpeg", "png"])
+    meal_type = st.selectbox(T["meal_type_label"], T["meal_types"])
+    uploaded_file = st.file_uploader(T["upload_label"], type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-        st.image(image, caption="アップロードされた食事", use_container_width=True)
+        st.image(image, use_container_width=True)
 
-        if st.button("エネルギー・栄養素を計算する"):
+        if st.button(T["analyze_btn"]):
             if not st.session_state["user_id"]:
-                st.error("履歴を保存するため、先にサイドバーからログインをしてください。")
+                st.error(T["login_required"])
             elif not api_key:
-                if SHARED_GEMINI_KEY:
-                    st.error("本日の無料利用回数(共有キー)を使い切りました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。")
-                else:
-                    st.error("サイドバーの「自分のGemini API Keyを使う」欄にAPI Keyを入力してください。")
+                st.error(T["quota_exceeded"] if SHARED_GEMINI_KEY else T["own_key_required"])
             elif not user_api_key and today_usage >= DAILY_FREE_LIMIT:
-                st.error("本日の無料利用回数(共有キー)を使い切りました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。")
+                st.error(T["quota_exceeded"])
             elif not supabase:
-                st.error("Supabaseの設定が未完了です。")
+                st.error(T["supabase_missing"])
             else:
-                with st.spinner("AIが分析中..."):
+                with st.spinner(T["analyzing"]):
                     try:
                         genai.configure(api_key=api_key)
                         model = genai.GenerativeModel("gemini-3.6-flash")
@@ -512,14 +794,17 @@ with tab_record:
                         image_resized = image.copy()
                         image_resized.thumbnail((800, 800))
 
-                        illness_prompt = "特になし" if has_illness == "なし" else f"持病・制限：{illness_detail}"
+                        illness_prompt = (
+                            "特になし" if has_illness == illness_options[0] else f"持病・制限：{illness_detail}"
+                        )
 
                         prompt = f"""
                         あなたはプロの管理栄養士です。食事画像から情報を解析してください。
                         利用者の健康データ：年齢 {age}歳、性別 {gender}、身長 {height}cm、体重 {weight}kg、目的 {purpose}、持病：{illness_prompt}
                         この食事の区分：{meal_type}
+                        {T["ai_output_lang_instruction"]}
 
-                        【出力フォーマット】(この形式を厳守してください)
+                        【出力フォーマット】(この形式を厳守してください。ラベル名(メニュー名、総カロリー等)は必ず日本語のまま、値と文章のみ指定言語にしてください)
                         ### 📊 栄養・カロリー計算結果
                         - **メニュー名**:（料理名）
                         - **総カロリー**: 〇〇 kcal
@@ -565,24 +850,20 @@ with tab_record:
                     except Exception as e:
                         error_text = str(e)
                         if "429" in error_text or "quota" in error_text.lower():
-                            st.error(
-                                "⚠️ 現在、AI分析の無料利用回数の上限に達しています。"
-                                "しばらく時間をおいてから再度お試しいただくか、"
-                                "ご自身のGemini API Keyの利用状況・プランをご確認ください。"
-                            )
+                            st.error(T["quota_error"])
                         elif "api_key" in error_text.lower() or "api key" in error_text.lower():
-                            st.error("⚠️ Gemini API Keyが正しくないか、無効になっている可能性があります。入力内容をご確認ください。")
+                            st.error(T["api_key_error"])
                         else:
-                            st.error(f"エラーが発生しました: {e}")
+                            st.error(T["generic_error"].format(e=e))
 
     if st.session_state["current_result"]:
         nutrition = st.session_state.get("current_nutrition") or {}
-        st.success(f"✅ {nutrition.get('menu_name', '')} を記録しました")
+        st.success(T["record_success"].format(menu=nutrition.get("menu_name", "")))
         st.info(nutrition.get("advice", ""))
 
     st.markdown("---")
     if not st.session_state["user_id"]:
-        st.info("ログインすると、今日の記録とスコアがここに表示されます。")
+        st.info(T["login_prompt_record"])
     else:
         render_today_tables(today_rows, target_calories)
 
@@ -590,10 +871,10 @@ with tab_record:
 # タブ2: 履歴
 # ---------------------------------------------------------
 with tab_history:
-    st.header("🗂️ 食事履歴の一覧")
+    st.header(T["history_header"])
 
     if not st.session_state["user_id"] or not supabase:
-        st.info("ログインすると、あなたの過去の食事履歴が表示されます。")
+        st.info(T["history_login_prompt"])
     else:
         try:
             res_history = (
@@ -606,32 +887,30 @@ with tab_history:
             rows = res_history.data or []
 
             if not rows:
-                st.info("まだ保存された食事履歴はありません。")
+                st.info(T["no_history"])
             else:
                 options = [
                     f"{row['created_at'][:16]} - [{row.get('meal_type', '')}] {row['menu_name']} ({row.get('calories', '')})"
                     for row in rows
                 ]
-                selected_opt = st.selectbox("過去の分析アドバイスを振り返る：", options)
+                selected_opt = st.selectbox(T["select_history_label"], options)
                 selected_idx = options.index(selected_opt)
                 selected_row = rows[selected_idx]
 
                 st.markdown("---")
-                st.subheader(f"📄 {selected_row['menu_name']} の詳細分析")
+                st.subheader(T["detail_header"].format(menu=selected_row["menu_name"]))
                 st.markdown(selected_row["detail_advice"])
 
                 col_del, col_export = st.columns(2)
                 with col_del:
-                    if st.button("🗑️ この記録を削除する"):
+                    if st.button(T["delete_btn"]):
                         supabase.table("diet_history_secure").delete().eq("id", selected_row["id"]).execute()
-                        st.success("削除しました。")
+                        st.success(T["delete_success"])
                         st.rerun()
                 with col_export:
                     df_export = pd.DataFrame(rows)
                     csv = df_export.to_csv(index=False).encode("utf-8-sig")
-                    st.download_button(
-                        "⬇️ 全履歴をCSVでダウンロード", data=csv, file_name="diet_history.csv", mime="text/csv"
-                    )
+                    st.download_button(T["download_btn"], data=csv, file_name="diet_history.csv", mime="text/csv")
 
                 today_str = datetime.now().date()
                 today_hist_rows = [r for r in rows if pd.to_datetime(r["created_at"]).date() == today_str]
@@ -642,11 +921,8 @@ with tab_history:
                 )
                 render_shopping_links(suggested_keyword, key_suffix="history")
         except Exception as e:
-            st.error(f"履歴データの取得に失敗しました: {e}")
+            st.error(T["history_error"].format(e=e))
 
 st.markdown("---")
-with st.expander("📜 本アプリの規約・プライバシーポリシー"):
-    st.caption(
-        "当アプリは、ユーザー登録情報をSupabaseを介して保護し、許可なく第三者に開示することはありません。"
-        "Amazonアソシエイト・プログラム、楽天アフィリエイトの参加者です。"
-    )
+with st.expander(T["policy_expander"]):
+    st.caption(T["policy_text"])
