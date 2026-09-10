@@ -415,7 +415,16 @@ else:
 saved_profile = st.session_state.get("profile") or {}
 
 profile_box = st.sidebar.container(border=True)
-profile_box.subheader(T["profile_header"])
+profile_box.markdown(
+    f"""
+    <div style="background-color:#D9455F;color:white;padding:10px 14px;
+                border-radius:10px;font-weight:bold;font-size:1.05em;
+                margin-bottom:6px;text-align:center;">
+        {T["profile_header"]}
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 if saved_profile:
     profile_box.caption(T["profile_loaded"])
 else:
@@ -451,7 +460,7 @@ if has_illness == illness_options[1]:
 purpose = profile_box.selectbox(T["purpose_label"], purpose_options, index=_idx(purpose_options, saved_profile.get("purpose")))
 
 if st.session_state["user_id"]:
-    if profile_box.button(T["save_profile_btn"]):
+    if profile_box.button(T["save_profile_btn"], type="primary", use_container_width=True):
         new_profile = {
             "age": age,
             "gender": gender,
@@ -598,29 +607,71 @@ def calculate_meal_score(protein_g, fat_g, carbs_g, fiber_g, sodium_g) -> float:
     return max(0, min(100, score))
 
 
-def suggest_shopping_keyword(protein_g, fat_g, carbs_g) -> str:
+def suggest_shopping_keyword(totals: dict) -> str:
+    """totals は {protein, fat, carbs, fiber, sodium, vitamin_c, vitamin_d, calcium, iron} の
+    グラム/mg/µg合計値を受け取り、最も対応が必要な栄養素に応じた商品キーワードを返す。
+    どれも適正なら、日替わりで一般的な健康食品をローテーション提案する。"""
+    protein_g = totals.get("protein", 0)
+    fat_g = totals.get("fat", 0)
+    carbs_g = totals.get("carbs", 0)
+    fiber_g = totals.get("fiber", 0)
+    sodium_g = totals.get("sodium", 0)
+    vc = totals.get("vitamin_c", 0)
+    vd = totals.get("vitamin_d", 0)
+    ca = totals.get("calcium", 0)
+    fe = totals.get("iron", 0)
+
     total_kcal = protein_g * 4 + fat_g * 9 + carbs_g * 4
-    if total_kcal <= 0:
-        return "マルチビタミン" if st.session_state["lang"] == "ja" else "Vitamin tổng hợp"
-    protein_ratio = (protein_g * 4) / total_kcal
-    fat_ratio = (fat_g * 9) / total_kcal
-    carbs_ratio = (carbs_g * 4) / total_kcal
-    if st.session_state["lang"] == "ja":
-        if protein_ratio < 0.13:
-            return "プロテイン"
-        if fat_ratio < 0.15:
-            return "オメガ3 DHA EPA サプリ"
-        if carbs_ratio > 0.70:
-            return "食物繊維 サプリ"
-        return "マルチビタミン"
-    else:
-        if protein_ratio < 0.13:
-            return "Whey protein"
-        if fat_ratio < 0.15:
-            return "Omega 3 DHA EPA"
-        if carbs_ratio > 0.70:
-            return "Chất xơ bổ sung"
-        return "Vitamin tổng hợp"
+    protein_ratio = (protein_g * 4 / total_kcal) if total_kcal else 0
+    fat_ratio = (fat_g * 9 / total_kcal) if total_kcal else 0
+
+    lang = st.session_state["lang"]
+    KEYWORDS = {
+        "ja": {
+            "protein": "プロテイン",
+            "fat": "オメガ3 DHA EPA サプリ",
+            "fiber": "食物繊維 サプリ",
+            "sodium": "減塩 調味料",
+            "vitamin_c": "ビタミンC サプリ",
+            "vitamin_d": "ビタミンD サプリ",
+            "calcium": "カルシウム サプリ",
+            "iron": "鉄分 サプリ",
+            "fallback": ["青汁", "スポーツドリンク", "プロテインバー", "素焼きミックスナッツ", "無糖ヨーグルト"],
+        },
+        "vi": {
+            "protein": "Whey protein",
+            "fat": "Omega 3 DHA EPA",
+            "fiber": "Chất xơ bổ sung",
+            "sodium": "Gia vị giảm muối",
+            "vitamin_c": "Vitamin C bổ sung",
+            "vitamin_d": "Vitamin D bổ sung",
+            "calcium": "Canxi bổ sung",
+            "iron": "Sắt bổ sung",
+            "fallback": ["Bột rau xanh", "Nước uống thể thao", "Thanh protein", "Hạt hỗn hợp rang mộc", "Sữa chua không đường"],
+        },
+    }[lang]
+
+    # 優先順位: 不足しているものから順にチェック
+    if protein_ratio < 0.13:
+        return KEYWORDS["protein"]
+    if fat_ratio < 0.15:
+        return KEYWORDS["fat"]
+    if fiber_g < 18:
+        return KEYWORDS["fiber"]
+    if vc < 75:
+        return KEYWORDS["vitamin_c"]
+    if vd < 5.5:
+        return KEYWORDS["vitamin_d"]
+    if ca < 600:
+        return KEYWORDS["calcium"]
+    if fe < 6:
+        return KEYWORDS["iron"]
+    if sodium_g > 7.5:
+        return KEYWORDS["sodium"]
+
+    # すべて適正な場合は、日替わりで一般的な健康食品をローテーション
+    fallback_list = KEYWORDS["fallback"]
+    return fallback_list[datetime.now().timetuple().tm_yday % len(fallback_list)]
 
 
 def render_shopping_links(default_keyword: str, key_suffix: str):
@@ -813,8 +864,12 @@ with tab_record:
                         genai.configure(api_key=api_key)
                         model = genai.GenerativeModel("gemini-3.6-flash")
 
+                        # 画像を小さくするほどアップロード・解析が速くなる。
+                        # 食事の判別には640pxもあれば十分。
                         image_resized = image.copy()
-                        image_resized.thumbnail((800, 800))
+                        if image_resized.mode != "RGB":
+                            image_resized = image_resized.convert("RGB")
+                        image_resized.thumbnail((640, 640))
 
                         illness_prompt = (
                             "特になし" if has_illness == illness_options[0] else f"持病・制限：{illness_detail}"
@@ -843,7 +898,11 @@ with tab_record:
                         ### 📝 アドバイス
                         (1〜2文で簡潔に。目標カロリー{target_calories:.0f}kcal/日との兼ね合いに軽く触れる)
                         """
-                        response = model.generate_content([prompt, image_resized])
+                        # 出力トークン数の上限を絞って生成時間を短縮する
+                        generation_config = genai.types.GenerationConfig(max_output_tokens=400)
+                        response = model.generate_content(
+                            [prompt, image_resized], generation_config=generation_config
+                        )
                         result_text = response.text
                         nutrition = parse_nutrition(result_text)
 
@@ -883,16 +942,24 @@ with tab_record:
         st.success(T["record_success"].format(menu=nutrition.get("menu_name", "")))
         st.info(nutrition.get("advice", ""))
 
-        suggested_keyword = suggest_shopping_keyword(
-            nutrition.get("protein", 0), nutrition.get("fat", 0), nutrition.get("carbs", 0)
-        )
-        render_shopping_links(suggested_keyword, key_suffix="record")
-
     st.markdown("---")
     if not st.session_state["user_id"]:
         st.info(T["login_prompt_record"])
     else:
         render_today_tables(today_rows, target_calories)
+
+        today_totals = {
+            "protein": sum(r["protein_g"] for r in today_rows),
+            "fat": sum(r["fat_g"] for r in today_rows),
+            "carbs": sum(r["carbs_g"] for r in today_rows),
+            "fiber": sum(r["fiber_g"] for r in today_rows),
+            "sodium": sum(r["sodium_g"] for r in today_rows),
+            "vitamin_c": sum(r["vitamin_c_mg"] for r in today_rows),
+            "vitamin_d": sum(r["vitamin_d_ug"] for r in today_rows),
+            "calcium": sum(r["calcium_mg"] for r in today_rows),
+            "iron": sum(r["iron_mg"] for r in today_rows),
+        }
+        render_shopping_links(suggest_shopping_keyword(today_totals), key_suffix="record")
 
 # ---------------------------------------------------------
 # タブ2: 履歴
@@ -941,12 +1008,18 @@ with tab_history:
 
                 today_str = datetime.now().date()
                 today_hist_rows = [r for r in rows if pd.to_datetime(r["created_at"]).date() == today_str]
-                suggested_keyword = suggest_shopping_keyword(
-                    sum(r.get("protein_g") or 0 for r in today_hist_rows),
-                    sum(r.get("fat_g") or 0 for r in today_hist_rows),
-                    sum(r.get("carbs_g") or 0 for r in today_hist_rows),
-                )
-                render_shopping_links(suggested_keyword, key_suffix="history")
+                today_hist_totals = {
+                    "protein": sum(r.get("protein_g") or 0 for r in today_hist_rows),
+                    "fat": sum(r.get("fat_g") or 0 for r in today_hist_rows),
+                    "carbs": sum(r.get("carbs_g") or 0 for r in today_hist_rows),
+                    "fiber": sum(r.get("fiber_g") or 0 for r in today_hist_rows),
+                    "sodium": sum(r.get("sodium_g") or 0 for r in today_hist_rows),
+                    "vitamin_c": sum(r.get("vitamin_c_mg") or 0 for r in today_hist_rows),
+                    "vitamin_d": sum(r.get("vitamin_d_ug") or 0 for r in today_hist_rows),
+                    "calcium": sum(r.get("calcium_mg") or 0 for r in today_hist_rows),
+                    "iron": sum(r.get("iron_mg") or 0 for r in today_hist_rows),
+                }
+                render_shopping_links(suggest_shopping_keyword(today_hist_totals), key_suffix="history")
         except Exception as e:
             st.error(T["history_error"].format(e=e))
 
