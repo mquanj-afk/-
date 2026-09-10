@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import altair as alt
 import streamlit as st
+import streamlit.components.v1 as components
 import google.generativeai as genai
 from PIL import Image
 from supabase import create_client, Client
@@ -261,6 +262,27 @@ st.set_page_config(page_title="FitCompanion", page_icon="🍁", layout="wide")
 # Streamlit標準の「Deploy」ボタン・GitHubアイコンは .streamlit/config.toml (toolbarMode="minimal")
 # で非表示にしている。ここではフッターの「Made with Streamlit」表記も非表示にする。
 st.markdown("<style>footer {visibility: hidden;}</style>", unsafe_allow_html=True)
+
+# 右下に表示される「Hosted with Streamlit」バッジを非表示にする。
+# このバッジはStreamlit Cloud側がページの最上位フレームに直接挿入するため、
+# 自分のアプリ内の要素をCSSで隠すだけでは消えない。components.htmlで発行した
+# 同一オリジンのフレームからwindow.topを操作して、該当リンクを非表示にする。
+components.html(
+    """
+    <script>
+    function hideStreamlitBadge() {
+        try {
+            window.top.document.querySelectorAll('a[href*="streamlit.io"]').forEach(function (el) {
+                el.style.display = "none";
+            });
+        } catch (e) {}
+    }
+    hideStreamlitBadge();
+    setInterval(hideStreamlitBadge, 1000);
+    </script>
+    """,
+    height=0,
+)
 
 if "lang" not in st.session_state:
     st.session_state["lang"] = "ja"
@@ -860,6 +882,11 @@ with tab_record:
         nutrition = st.session_state.get("current_nutrition") or {}
         st.success(T["record_success"].format(menu=nutrition.get("menu_name", "")))
         st.info(nutrition.get("advice", ""))
+
+        suggested_keyword = suggest_shopping_keyword(
+            nutrition.get("protein", 0), nutrition.get("fat", 0), nutrition.get("carbs", 0)
+        )
+        render_shopping_links(suggested_keyword, key_suffix="record")
 
     st.markdown("---")
     if not st.session_state["user_id"]:
