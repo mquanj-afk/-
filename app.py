@@ -31,6 +31,7 @@ TEXTS = {
         "logged_in": "🔒 ログイン中",
         "logout_btn": "ログアウト",
         "signup_success": "登録完了！「ログイン」に切り替えてログインしてください。",
+        "max_users_reached": "現在、招待制のクローズドベータ運用中のため、新規登録の受付を停止しています。",
         "signup_error": "登録エラー: {e}",
         "login_success": "ログイン成功！",
         "login_fail": "ログインに失敗しました。",
@@ -150,6 +151,7 @@ TEXTS = {
         "logged_in": "🔒 Đã đăng nhập",
         "logout_btn": "Đăng xuất",
         "signup_success": "Đăng ký thành công! Vui lòng chuyển sang mục “Đăng nhập” để tiếp tục.",
+        "max_users_reached": "Hiện đang trong giai đoạn thử nghiệm giới hạn số lượng người dùng, tạm thời không nhận đăng ký mới.",
         "signup_error": "Lỗi đăng ký: {e}",
         "login_success": "Đăng nhập thành công!",
         "login_fail": "Đăng nhập thất bại.",
@@ -263,6 +265,34 @@ st.set_page_config(page_title="FitCompanion", page_icon="🍁", layout="wide")
 # で非表示にしている。ここではフッターの「Made with Streamlit」表記も非表示にする。
 st.markdown("<style>footer {visibility: hidden;}</style>", unsafe_allow_html=True)
 
+# スマホ画面向けの最適化: 余白を詰めてボタン・タブをタップしやすい大きさにする
+st.markdown(
+    """
+    <style>
+    @media (max-width: 640px) {
+        .block-container {
+            padding-top: 1.2rem;
+            padding-left: 0.8rem;
+            padding-right: 0.8rem;
+        }
+        .stButton > button, .stLinkButton > a, .stDownloadButton > button {
+            font-size: 1.02em;
+            padding-top: 0.6em;
+            padding-bottom: 0.6em;
+        }
+        .stTabs [data-baseweb="tab"] {
+            font-size: 1.0em;
+            padding: 10px 8px;
+        }
+        div[data-testid="stMetricValue"] {
+            font-size: 1.4rem;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # 右下に表示される「Hosted with Streamlit」バッジを非表示にする。
 # このバッジはStreamlit Cloud側がページの最上位フレームに直接挿入するため、
 # 自分のアプリ内の要素をCSSで隠すだけでは消えない。components.htmlで発行した
@@ -326,6 +356,7 @@ for key, default in {
     "current_result": None,
     "current_nutrition": None,
     "profile": None,
+    "auth_restore_attempted": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -355,9 +386,70 @@ def save_profile(user_id: str, profile_data: dict) -> bool:
         return False
 
 
+AUTH_COOKIE_NAME = "fitcompanion_refresh_token"
+
+
+def set_auth_cookie(refresh_token: str):
+    """ログイン状態を保持するため、ブラウザにrefresh_tokenを30日間のCookieとして保存する。
+    Streamlitはst.context.cookiesで読み取り専用にCookieを取得できるが、書き込みはできないため、
+    JavaScript経由でdocument.cookieに書き込む。"""
+    components.html(
+        f"""
+        <script>
+        document.cookie = "{AUTH_COOKIE_NAME}={refresh_token}; max-age=2592000; path=/; SameSite=Lax";
+        </script>
+        """,
+        height=0,
+    )
+
+
+def clear_auth_cookie():
+    components.html(
+        f"""
+        <script>
+        document.cookie = "{AUTH_COOKIE_NAME}=; max-age=0; path=/";
+        </script>
+        """,
+        height=0,
+    )
+
+
+# ログイン状態の自動復元: ブラウザに保存されたrefresh_tokenがあれば、
+# パスワード再入力なしでセッションを復元する(一度のブラウザセッションにつき1回だけ試みる)。
+if not st.session_state["auth_restore_attempted"] and st.session_state["user_id"] is None and supabase:
+    st.session_state["auth_restore_attempted"] = True
+    stored_refresh_token = st.context.cookies.get(AUTH_COOKIE_NAME)
+    if stored_refresh_token:
+        try:
+            restore_res = supabase.auth.refresh_session(stored_refresh_token)
+            if restore_res and restore_res.user and restore_res.session:
+                st.session_state["user_id"] = restore_res.user.id
+                st.session_state["profile"] = load_profile(restore_res.user.id)
+                # Supabaseのrefresh_tokenは使い捨て(ローテーション)のため、
+                # 新しく発行されたtokenで必ずCookieを更新する
+                set_auth_cookie(restore_res.session.refresh_token)
+                st.rerun()
+        except Exception:
+            clear_auth_cookie()
+
 # =========================================================
 # 2. 🔐 会員登録・ログインシステム
 # =========================================================
+MAX_REGISTERED_USERS = 6
+
+
+def get_registered_user_count() -> int:
+    """user_profilesテーブルの行数を「登録済みユーザー数」の目安として数える。
+    新規登録時に必ず1行作成するため、実質的な登録者数と一致する。"""
+    if not supabase:
+        return 0
+    try:
+        res = supabase.table("user_profiles").select("user_id", count="exact").execute()
+        return res.count or 0
+    except Exception:
+        return 0
+
+
 st.sidebar.header(T["account_header"])
 
 if st.session_state["user_id"] is None:
@@ -366,23 +458,27 @@ if st.session_state["user_id"] is None:
     password = st.sidebar.text_input(T["password_label"], type="password")
 
     if auth_action == T["menu_signup"]:
-        if st.sidebar.button(T["create_account_btn"]):
+        if st.sidebar.button(T["create_account_btn"], use_container_width=True):
             if not supabase:
                 st.sidebar.error(T["supabase_missing"])
             elif not email.strip() or not password.strip():
                 st.sidebar.error(T["email_pw_required"])
             elif len(password.strip()) < 6:
                 st.sidebar.error(T["pw_too_short"])
+            elif get_registered_user_count() >= MAX_REGISTERED_USERS:
+                st.sidebar.error(T["max_users_reached"])
             else:
                 try:
                     res = supabase.auth.sign_up({"email": email.strip(), "password": password.strip()})
                     if res.user:
+                        # 空レコードでも作成しておき、登録者数カウントの対象にする
+                        save_profile(res.user.id, {})
                         st.sidebar.success(T["signup_success"])
                 except Exception as e:
                     st.sidebar.error(T["signup_error"].format(e=e))
 
     elif auth_action == T["menu_login"]:
-        if st.sidebar.button(T["login_btn"]):
+        if st.sidebar.button(T["login_btn"], type="primary", use_container_width=True):
             if not supabase:
                 st.sidebar.error(T["supabase_missing"])
             elif not email.strip() or not password.strip():
@@ -393,17 +489,25 @@ if st.session_state["user_id"] is None:
                     if res.user:
                         st.session_state["user_id"] = res.user.id
                         st.session_state["profile"] = load_profile(res.user.id)
+                        if res.session:
+                            set_auth_cookie(res.session.refresh_token)
                         st.sidebar.success(T["login_success"])
                         st.rerun()
                 except Exception:
                     st.sidebar.error(T["login_fail"])
 else:
     st.sidebar.success(T["logged_in"])
-    if st.sidebar.button(T["logout_btn"]):
+    if st.sidebar.button(T["logout_btn"], use_container_width=True):
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
+        clear_auth_cookie()
         st.session_state["user_id"] = None
         st.session_state["current_result"] = None
         st.session_state["current_nutrition"] = None
         st.session_state["profile"] = None
+        st.session_state["auth_restore_attempted"] = False
         st.rerun()
 
     if st.session_state["profile"] is None:
@@ -414,13 +518,33 @@ else:
 # =========================================================
 saved_profile = st.session_state.get("profile") or {}
 
-profile_box = st.sidebar.container(border=True)
+# プロフィール欄のコンテナに固定のCSSクラス(st-key-profile_highlight_box)を付与し、
+# 目立つよう枠線をパルスさせるアニメーションを適用する
+st.markdown(
+    """
+    <style>
+    @keyframes fc-pulse-border {
+        0%   { box-shadow: 0 0 0 0 rgba(217, 69, 95, 0.55); }
+        70%  { box-shadow: 0 0 0 8px rgba(217, 69, 95, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(217, 69, 95, 0); }
+    }
+    .st-key-profile_highlight_box {
+        animation: fc-pulse-border 2.2s infinite;
+        border: 2px solid #D9455F !important;
+        border-radius: 12px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+profile_box = st.sidebar.container(border=True, key="profile_highlight_box")
 profile_box.markdown(
     f"""
     <div style="background-color:#D9455F;color:white;padding:10px 14px;
-                border-radius:10px;font-weight:bold;font-size:1.05em;
+                border-radius:10px;font-weight:bold;font-size:1.1em;
                 margin-bottom:6px;text-align:center;">
-        {T["profile_header"]}
+        📋 {T["profile_header"]}
     </div>
     """,
     unsafe_allow_html=True,
@@ -505,7 +629,7 @@ st.sidebar.metric(T["target_calorie_label"], f"{target_calories:.0f} kcal")
 # =========================================================
 # 5. AI利用: 運営者の共有キー(1日の無料回数あり) + 自分のキー(無制限)
 # =========================================================
-DAILY_FREE_LIMIT = 5
+DAILY_FREE_LIMIT = 3
 SHARED_GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
 
 
@@ -849,7 +973,7 @@ with tab_record:
         image = Image.open(uploaded_file)
         st.image(image, use_container_width=True)
 
-        if st.button(T["analyze_btn"]):
+        if st.button(T["analyze_btn"], type="primary", use_container_width=True):
             if not st.session_state["user_id"]:
                 st.error(T["login_required"])
             elif not api_key:
@@ -862,14 +986,16 @@ with tab_record:
                 with st.spinner(T["analyzing"]):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel("gemini-3.6-flash")
+                        # gemini-3.5-flash-liteは画像からの構造化抽出のような単純作業に強く、
+                        # gemini-3.6-flashより高速・低コスト
+                        model = genai.GenerativeModel("gemini-3.5-flash-lite")
 
                         # 画像を小さくするほどアップロード・解析が速くなる。
                         # 食事の判別には640pxもあれば十分。
                         image_resized = image.copy()
                         if image_resized.mode != "RGB":
                             image_resized = image_resized.convert("RGB")
-                        image_resized.thumbnail((640, 640))
+                        image_resized.thumbnail((512, 512))
 
                         illness_prompt = (
                             "特になし" if has_illness == illness_options[0] else f"持病・制限：{illness_detail}"
