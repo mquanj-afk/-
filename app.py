@@ -454,8 +454,9 @@ st.sidebar.header(T["account_header"])
 
 if st.session_state["user_id"] is None:
     auth_action = st.sidebar.radio("メニュー", [T["menu_login"], T["menu_signup"]])
-    email = st.sidebar.text_input(T["email_label"])
-    password = st.sidebar.text_input(T["password_label"], type="password")
+    email = st.sidebar.text_input(T["email_label"], autocomplete="email")
+    password_autocomplete = "new-password" if auth_action == T["menu_signup"] else "current-password"
+    password = st.sidebar.text_input(T["password_label"], type="password", autocomplete=password_autocomplete)
 
     if auth_action == T["menu_signup"]:
         if st.sidebar.button(T["create_account_btn"], use_container_width=True):
