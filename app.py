@@ -71,6 +71,7 @@ TEXTS = {
         "analyze_btn": "エネルギー・栄養素を計算する",
         "login_required": "履歴を保存するため、先にサイドバーからログインをしてください。",
         "quota_exceeded": "本日の無料利用回数(共有キー)を使い切りました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。",
+        "global_quota_exceeded": "本日は全ユーザー合計の無料利用回数の上限に達しました。明日また利用いただくか、サイドバーからご自身のAPI Keyを入力してください。",
         "own_key_required": "サイドバーの「自分のGemini API Keyを使う」欄にAPI Keyを入力してください。",
         "analyzing": "AIが分析中...",
         "quota_error": "⚠️ 現在、AI分析の無料利用回数の上限に達しています。しばらく時間をおいてから再度お試しいただくか、ご自身のGemini API Keyの利用状況・プランをご確認ください。",
@@ -195,6 +196,7 @@ TEXTS = {
         "analyze_btn": "Tính năng lượng & dinh dưỡng",
         "login_required": "Vui lòng đăng nhập ở thanh bên trước để lưu lịch sử.",
         "quota_exceeded": "Bạn đã dùng hết số lần miễn phí hôm nay (key dùng chung). Vui lòng thử lại vào ngày mai, hoặc nhập API Key riêng của bạn ở thanh bên.",
+        "global_quota_exceeded": "Hôm nay tổng số lượt phân tích miễn phí (tất cả người dùng) đã đạt giới hạn. Vui lòng thử lại vào ngày mai, hoặc nhập API Key riêng của bạn ở thanh bên.",
         "own_key_required": "Vui lòng nhập API Key vào mục “Dùng API Key Gemini của riêng bạn” ở thanh bên.",
         "analyzing": "AI đang phân tích...",
         "quota_error": "⚠️ Đã đạt giới hạn số lần phân tích miễn phí hôm nay. Vui lòng thử lại sau, hoặc kiểm tra gói/API Key Gemini của bạn.",
@@ -320,6 +322,7 @@ TEXTS = {
         "analyze_btn": "Analyze energy & nutrients",
         "login_required": "Please log in from the sidebar first so your history can be saved.",
         "quota_exceeded": "You've used up today's free analyses (shared key). Please try again tomorrow, or enter your own API Key in the sidebar.",
+        "global_quota_exceeded": "Today's total free analysis limit (across all users) has been reached. Please try again tomorrow, or enter your own API Key in the sidebar.",
         "own_key_required": "Please enter an API Key in the “Use your own Gemini API Key” section in the sidebar.",
         "analyzing": "AI is analyzing...",
         "quota_error": "⚠️ The free daily analysis limit has been reached. Please try again later, or check your own Gemini API Key's plan/usage.",
@@ -428,24 +431,30 @@ st.markdown(
 )
 
 # サイドバーを開くための矢印(スマホでは閉じた状態がデフォルトで見落とされやすい)を、
-# テーマカラーの丸いボタンにして目立たせる
+# テーマカラーの丸いボタン+パルスアニメーションで強く目立たせる
 st.markdown(
     """
     <style>
+    @keyframes fc-arrow-pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(217, 69, 95, 0.7); }
+        70%  { box-shadow: 0 0 0 12px rgba(217, 69, 95, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(217, 69, 95, 0); }
+    }
     [data-testid="collapsedControl"],
     [data-testid*="CollapsedControl" i] {
         background-color: #D9455F !important;
         border-radius: 50% !important;
-        padding: 6px !important;
-        box-shadow: 0 2px 8px rgba(217, 69, 95, 0.5) !important;
+        padding: 8px !important;
         opacity: 1 !important;
+        animation: fc-arrow-pulse 1.8s infinite;
+        z-index: 999999 !important;
     }
     [data-testid="collapsedControl"] svg,
     [data-testid*="CollapsedControl" i] svg {
         fill: white !important;
         color: white !important;
-        width: 26px !important;
-        height: 26px !important;
+        width: 30px !important;
+        height: 30px !important;
     }
     </style>
     """,
@@ -624,9 +633,6 @@ if st.session_state["user_id"] is None and supabase:
 # =========================================================
 # 2. 🔐 会員登録・ログインシステム
 # =========================================================
-MAX_REGISTERED_USERS = 6
-
-
 def is_valid_password(pw: str) -> bool:
     """8文字以上、かつ英字と数字を両方含むことを要求する。"""
     if len(pw) < 8:
@@ -634,18 +640,6 @@ def is_valid_password(pw: str) -> bool:
     has_letter = re.search(r"[A-Za-z]", pw) is not None
     has_digit = re.search(r"[0-9]", pw) is not None
     return has_letter and has_digit
-
-
-def get_registered_user_count() -> int:
-    """user_profilesテーブルの行数を「登録済みユーザー数」の目安として数える。
-    新規登録時に必ず1行作成するため、実質的な登録者数と一致する。"""
-    if not supabase:
-        return 0
-    try:
-        res = supabase.table("user_profiles").select("user_id", count="exact").execute()
-        return res.count or 0
-    except Exception:
-        return 0
 
 
 st.sidebar.header(T["account_header"])
@@ -664,13 +658,10 @@ if st.session_state["user_id"] is None:
                 st.sidebar.error(T["email_pw_required"])
             elif not is_valid_password(password.strip()):
                 st.sidebar.error(T["pw_too_short"])
-            elif get_registered_user_count() >= MAX_REGISTERED_USERS:
-                st.sidebar.error(T["max_users_reached"])
             else:
                 try:
                     res = supabase.auth.sign_up({"email": email.strip(), "password": password.strip()})
                     if res.user:
-                        # 空レコードでも作成しておき、登録者数カウントの対象にする
                         save_profile(res.user.id, {})
                         st.sidebar.success(T["signup_success"])
                 except Exception as e:
@@ -828,6 +819,7 @@ st.sidebar.metric(T["target_calorie_label"], f"{target_calories:.0f} kcal")
 # 5. AI利用: 運営者の共有キー(1日の無料回数あり) + 自分のキー(無制限)
 # =========================================================
 DAILY_FREE_LIMIT = 3
+GLOBAL_SHARED_KEY_DAILY_LIMIT = 20  # Gemini無料枠の1日あたりの上限(全ユーザー合計)
 SHARED_GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
 
 
@@ -857,6 +849,24 @@ def get_today_rows(user_id: str) -> list:
             row[col] = row.get(col) or 0.0
         row["meal_type"] = row.get("meal_type") or "-"
     return rows
+
+
+def get_global_today_count() -> int:
+    """全ユーザー合計で、共有キーを使った今日のリクエスト数の目安を数える
+    (実際にはユーザー自身のキー利用分も同じテーブルに入るため、やや多めに出ることがある)。"""
+    if not supabase:
+        return 0
+    today_start = datetime.now().strftime("%Y-%m-%dT00:00:00")
+    try:
+        res = (
+            supabase.table("diet_history_secure")
+            .select("id", count="exact")
+            .gte("created_at", today_start)
+            .execute()
+        )
+        return res.count or 0
+    except Exception:
+        return 0
 
 
 today_rows = get_today_rows(st.session_state["user_id"]) if st.session_state["user_id"] else []
@@ -1206,6 +1216,8 @@ with tab_record:
                 st.error(T["quota_exceeded"] if SHARED_GEMINI_KEY else T["own_key_required"])
             elif not user_api_key and today_usage >= DAILY_FREE_LIMIT:
                 st.error(T["quota_exceeded"])
+            elif not user_api_key and get_global_today_count() >= GLOBAL_SHARED_KEY_DAILY_LIMIT:
+                st.error(T["global_quota_exceeded"])
             elif not supabase:
                 st.error(T["supabase_missing"])
             else:
