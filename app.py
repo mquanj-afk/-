@@ -17,6 +17,7 @@ from supabase import create_client, Client
 TEXTS = {
     "ja": {
         "app_caption": "AIが写真から栄養バランスを判定し、今日の食事に点数をつけます。",
+        "sidebar_hint": "👈 画面左上の矢印(≫)をタップすると、プロフィール入力やログインができます。",
         "disclaimer": (
             "⚠️ 本アプリはAIによる簡易的な栄養アドバイスを提供するもので、医療的な診断・治療の代わりにはなりません。"
             "持病がある方や体調に不安がある方は、必ず医師・管理栄養士にご相談のうえご利用ください。"
@@ -141,6 +142,7 @@ TEXTS = {
     },
     "vi": {
         "app_caption": "AI phân tích ảnh bữa ăn và chấm điểm cân bằng dinh dưỡng cho bạn mỗi ngày.",
+        "sidebar_hint": "👈 Nhấn vào mũi tên (≫) ở góc trên bên trái để đăng nhập và nhập hồ sơ cá nhân.",
         "disclaimer": (
             "⚠️ Ứng dụng này cung cấp lời khuyên dinh dưỡng đơn giản từ AI, không thay thế cho chẩn đoán "
             "hoặc điều trị y tế. Nếu bạn có bệnh nền hoặc lo lắng về sức khỏe, vui lòng tham khảo ý kiến "
@@ -267,6 +269,7 @@ TEXTS = {
     },
     "en": {
         "app_caption": "AI analyzes your meal photos and scores your nutritional balance every day.",
+        "sidebar_hint": "👈 Tap the arrow (≫) in the top-left corner to log in and fill in your profile.",
         "disclaimer": (
             "⚠️ This app provides simple AI-generated nutrition advice and is not a substitute for medical "
             "diagnosis or treatment. If you have a pre-existing condition or health concerns, please consult "
@@ -529,6 +532,7 @@ T = TEXTS[st.session_state["lang"]]
 st.title("🍁 FitCompanion")
 st.caption(T["app_caption"])
 st.info(T["disclaimer"])
+st.warning(T["sidebar_hint"])
 
 # --- 🔐 SUPABASEの設定 ---
 try:
