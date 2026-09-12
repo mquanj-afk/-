@@ -1,0 +1,11 @@
+[client]
+# ツールバーの「Deploy」ボタンやGitHubアイコンなど、開発者向けメニューを非表示にする
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#D9455F"            # もみじの濃いピンク赤(ボタン・アクセント)
+backgroundColor = "#FFF8F6"         # 目に優しい淡いピンクベージュ
+secondaryBackgroundColor = "#FDE7E9" # サイドバー・カードの薄いピンク
+textColor = "#3B2A2A"               # 黒より柔らかい、目に優しい濃茶系テキスト
+font = "sans serif"
