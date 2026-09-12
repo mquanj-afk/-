@@ -1,11 +1,12 @@
 import re
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import altair as alt
 import streamlit as st
 import streamlit.components.v1 as components
+import extra_streamlit_components as stx
 import google.generativeai as genai
 from PIL import Image
 from supabase import create_client, Client
@@ -426,6 +427,58 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# サイドバーを開くための矢印(スマホでは閉じた状態がデフォルトで見落とされやすい)を、
+# テーマカラーの丸いボタンにして目立たせる
+st.markdown(
+    """
+    <style>
+    [data-testid*="CollapsedControl"] {
+        background-color: #D9455F !important;
+        border-radius: 50% !important;
+        padding: 6px !important;
+        box-shadow: 0 2px 8px rgba(217, 69, 95, 0.5) !important;
+    }
+    [data-testid*="CollapsedControl"] svg {
+        fill: white !important;
+        color: white !important;
+        width: 26px !important;
+        height: 26px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# アプリ全体をフレンドリーな印象にするための共通スタイル(角丸・やわらかい影)
+st.markdown(
+    """
+    <style>
+    .stButton > button, .stLinkButton > a, .stDownloadButton > button {
+        border-radius: 999px !important;
+        border: none !important;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .stButton > button:hover, .stLinkButton > a:hover, .stDownloadButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(217, 69, 95, 0.25);
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 16px !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 12px 12px 0 0 !important;
+    }
+    img {
+        border-radius: 14px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # 右下に表示される「Hosted with Streamlit」バッジを非表示にする。
 # このバッジはStreamlit Cloud側がページの最上位フレームに直接挿入するため、
 # 自分のアプリ内の要素をCSSで隠すだけでは消えない。components.htmlで発行した
@@ -492,7 +545,6 @@ for key, default in {
     "current_result": None,
     "current_nutrition": None,
     "profile": None,
-    "auth_restore_attempted": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -525,36 +577,38 @@ def save_profile(user_id: str, profile_data: dict) -> bool:
 AUTH_COOKIE_NAME = "fitcompanion_refresh_token"
 
 
-def set_auth_cookie(refresh_token: str):
-    """ログイン状態を保持するため、ブラウザにrefresh_tokenを30日間のCookieとして保存する。
-    Streamlitはst.context.cookiesで読み取り専用にCookieを取得できるが、書き込みはできないため、
-    JavaScript経由でdocument.cookieに書き込む。"""
-    components.html(
-        f"""
-        <script>
-        document.cookie = "{AUTH_COOKIE_NAME}={refresh_token}; max-age=2592000; path=/; SameSite=Lax";
-        </script>
-        """,
-        height=0,
-    )
+@st.cache_resource(show_spinner=False)
+def get_cookie_manager():
+    return stx.CookieManager()
 
 
-def clear_auth_cookie():
-    components.html(
-        f"""
-        <script>
-        document.cookie = "{AUTH_COOKIE_NAME}=; max-age=0; path=/";
-        </script>
-        """,
-        height=0,
-    )
+cookie_manager = get_cookie_manager()
+
+
+def set_auth_cookie(refresh_token: str, widget_key: str):
+    """ログイン状態を保持するため、ブラウザにrefresh_tokenを30日間のCookieとして保存する。"""
+    try:
+        cookie_manager.set(
+            AUTH_COOKIE_NAME,
+            refresh_token,
+            expires_at=datetime.now() + timedelta(days=30),
+            key=widget_key,
+        )
+    except Exception:
+        pass
+
+
+def clear_auth_cookie(widget_key: str):
+    try:
+        cookie_manager.delete(AUTH_COOKIE_NAME, key=widget_key)
+    except Exception:
+        pass
 
 
 # ログイン状態の自動復元: ブラウザに保存されたrefresh_tokenがあれば、
-# パスワード再入力なしでセッションを復元する(一度のブラウザセッションにつき1回だけ試みる)。
-if not st.session_state["auth_restore_attempted"] and st.session_state["user_id"] is None and supabase:
-    st.session_state["auth_restore_attempted"] = True
-    stored_refresh_token = st.context.cookies.get(AUTH_COOKIE_NAME)
+# パスワード再入力なしでセッションを復元する。
+if st.session_state["user_id"] is None and supabase:
+    stored_refresh_token = cookie_manager.get(cookie=AUTH_COOKIE_NAME)
     if stored_refresh_token:
         try:
             restore_res = supabase.auth.refresh_session(stored_refresh_token)
@@ -563,10 +617,10 @@ if not st.session_state["auth_restore_attempted"] and st.session_state["user_id"
                 st.session_state["profile"] = load_profile(restore_res.user.id)
                 # Supabaseのrefresh_tokenは使い捨て(ローテーション)のため、
                 # 新しく発行されたtokenで必ずCookieを更新する
-                set_auth_cookie(restore_res.session.refresh_token)
+                set_auth_cookie(restore_res.session.refresh_token, widget_key="set_restore")
                 st.rerun()
         except Exception:
-            clear_auth_cookie()
+            clear_auth_cookie(widget_key="delete_restore_fail")
 
 # =========================================================
 # 2. 🔐 会員登録・ログインシステム
@@ -636,7 +690,7 @@ if st.session_state["user_id"] is None:
                         st.session_state["user_id"] = res.user.id
                         st.session_state["profile"] = load_profile(res.user.id)
                         if res.session:
-                            set_auth_cookie(res.session.refresh_token)
+                            set_auth_cookie(res.session.refresh_token, widget_key="set_login")
                         st.sidebar.success(T["login_success"])
                         st.rerun()
                 except Exception:
@@ -648,12 +702,11 @@ else:
             supabase.auth.sign_out()
         except Exception:
             pass
-        clear_auth_cookie()
+        clear_auth_cookie(widget_key="delete_logout")
         st.session_state["user_id"] = None
         st.session_state["current_result"] = None
         st.session_state["current_nutrition"] = None
         st.session_state["profile"] = None
-        st.session_state["auth_restore_attempted"] = False
         st.rerun()
 
     if st.session_state["profile"] is None:
