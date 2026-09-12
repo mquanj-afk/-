@@ -471,12 +471,13 @@ st.markdown(
 
 # アプリ全体をフレンドリーな印象にするための共通スタイル(角丸・やわらかい影・丸ゴシックフォント)
 st.markdown(
+    '<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">',
+    unsafe_allow_html=True,
+)
+st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap');
-
-    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox,
-    .stTabs, .stMetric, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
+    html, body, * {
         font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Quicksand', sans-serif !important;
     }
     .stButton > button, .stLinkButton > a, .stDownloadButton > button {
@@ -546,7 +547,9 @@ st.title("🍁 FitCompanion")
 st.caption(T["app_caption"])
 st.info(T["disclaimer"])
 
-# 矢印の隣に案内ラベルを固定表示する(Streamlit内部要素の位置に依存しない、自前の要素)
+# 矢印の隣に案内ラベルを固定表示する(Streamlit内部要素の位置に依存しない、自前の要素)。
+# pointer-events: none により、ラベル自体はクリックを受け取らず、下にある本来の
+# 開閉ボタンへクリックがそのまま通り抜けるようにする(押せなくなる問題を防ぐ)。
 st.markdown(
     f"""
     <div style="
@@ -562,6 +565,7 @@ st.markdown(
         font-size: 0.9em;
         box-shadow: 0 2px 8px rgba(217, 69, 95, 0.4);
         white-space: nowrap;
+        pointer-events: none;
     ">
         {T["sidebar_hint"]}
     </div>
