@@ -434,43 +434,55 @@ st.markdown(
 )
 
 # サイドバーを開くための矢印(スマホでは閉じた状態がデフォルトで見落とされやすい)を、
-# テーマカラーの丸いボタン+パルスアニメーションで強く目立たせる
+# テーマカラーの大きな丸いボタン+パルスアニメーションで強く目立たせる
 st.markdown(
     """
     <style>
     @keyframes fc-arrow-pulse {
         0%   { box-shadow: 0 0 0 0 rgba(217, 69, 95, 0.7); }
-        70%  { box-shadow: 0 0 0 12px rgba(217, 69, 95, 0); }
+        70%  { box-shadow: 0 0 0 16px rgba(217, 69, 95, 0); }
         100% { box-shadow: 0 0 0 0 rgba(217, 69, 95, 0); }
     }
     [data-testid="collapsedControl"],
     [data-testid*="CollapsedControl" i] {
         background-color: #D9455F !important;
         border-radius: 50% !important;
-        padding: 8px !important;
+        padding: 10px !important;
+        min-width: 48px !important;
+        min-height: 48px !important;
         opacity: 1 !important;
         animation: fc-arrow-pulse 1.8s infinite;
         z-index: 999999 !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
     }
     [data-testid="collapsedControl"] svg,
     [data-testid*="CollapsedControl" i] svg {
         fill: white !important;
         color: white !important;
-        width: 30px !important;
-        height: 30px !important;
+        width: 38px !important;
+        height: 38px !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# アプリ全体をフレンドリーな印象にするための共通スタイル(角丸・やわらかい影)
+# アプリ全体をフレンドリーな印象にするための共通スタイル(角丸・やわらかい影・丸ゴシックフォント)
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap');
+
+    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox,
+    .stTabs, .stMetric, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
+        font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Quicksand', sans-serif !important;
+    }
     .stButton > button, .stLinkButton > a, .stDownloadButton > button {
         border-radius: 999px !important;
         border: none !important;
+        font-weight: 700 !important;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
     .stButton > button:hover, .stLinkButton > a:hover, .stDownloadButton > button:hover {
@@ -485,6 +497,7 @@ st.markdown(
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 12px 12px 0 0 !important;
+        font-weight: 700 !important;
     }
     img {
         border-radius: 14px;
@@ -532,7 +545,29 @@ T = TEXTS[st.session_state["lang"]]
 st.title("🍁 FitCompanion")
 st.caption(T["app_caption"])
 st.info(T["disclaimer"])
-st.warning(T["sidebar_hint"])
+
+# 矢印の隣に案内ラベルを固定表示する(Streamlit内部要素の位置に依存しない、自前の要素)
+st.markdown(
+    f"""
+    <div style="
+        position: fixed;
+        top: 14px;
+        left: 68px;
+        z-index: 999998;
+        background-color: #D9455F;
+        color: white;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-weight: bold;
+        font-size: 0.9em;
+        box-shadow: 0 2px 8px rgba(217, 69, 95, 0.4);
+        white-space: nowrap;
+    ">
+        {T["sidebar_hint"]}
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # --- 🔐 SUPABASEの設定 ---
 try:
