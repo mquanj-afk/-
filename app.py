@@ -432,13 +432,16 @@ st.markdown(
 st.markdown(
     """
     <style>
-    [data-testid*="CollapsedControl"] {
+    [data-testid="collapsedControl"],
+    [data-testid*="CollapsedControl" i] {
         background-color: #D9455F !important;
         border-radius: 50% !important;
         padding: 6px !important;
         box-shadow: 0 2px 8px rgba(217, 69, 95, 0.5) !important;
+        opacity: 1 !important;
     }
-    [data-testid*="CollapsedControl"] svg {
+    [data-testid="collapsedControl"] svg,
+    [data-testid*="CollapsedControl" i] svg {
         fill: white !important;
         color: white !important;
         width: 26px !important;
