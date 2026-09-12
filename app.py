@@ -37,7 +37,7 @@ TEXTS = {
         "login_fail": "ログインに失敗しました。",
         "supabase_missing": "Supabaseの設定が未完了です。",
         "email_pw_required": "メールアドレスとパスワードを両方正しく入力してください。",
-        "pw_too_short": "パスワードは6文字以上で入力してください。",
+        "pw_too_short": "パスワードは8文字以上で、英字と数字の両方を含めてください。",
         "profile_header": "👤 利用者プロフィール",
         "profile_loaded": "✅ 保存済みプロフィールを読み込みました",
         "profile_hint": "⚠️ 目標カロリーを正しく計算するため、下の項目を必ず入力してください👇",
@@ -110,6 +110,10 @@ TEXTS = {
         "score_low_msg": "💪 明日はタンパク質・食物繊維・塩分のバランスを見直してみましょう。",
         "score_caption": "夕食を記録すると、その日の最終スコアが確定します。",
         "no_record_caption": "まだ今日の記録がありません。上のフォームから食事を記録してみましょう。",
+        "advice_label": "💬 アドバイス",
+        "translate_label": "🌐 この記録を表示する言語",
+        "translate_btn": "翻訳する",
+        "translating": "翻訳中...",
         "history_header": "🗂️ 食事履歴の一覧",
         "history_login_prompt": "ログインすると、あなたの過去の食事履歴が表示されます。",
         "no_history": "まだ保存された食事履歴はありません。",
@@ -157,7 +161,7 @@ TEXTS = {
         "login_fail": "Đăng nhập thất bại.",
         "supabase_missing": "Chưa thiết lập xong Supabase.",
         "email_pw_required": "Vui lòng nhập đầy đủ và chính xác email và mật khẩu.",
-        "pw_too_short": "Mật khẩu phải có ít nhất 6 ký tự.",
+        "pw_too_short": "Mật khẩu phải có ít nhất 8 ký tự và bao gồm cả chữ cái và số.",
         "profile_header": "👤 Hồ sơ cá nhân",
         "profile_loaded": "✅ Đã tải hồ sơ đã lưu",
         "profile_hint": "⚠️ Vui lòng nhập đầy đủ thông tin bên dưới để tính calo mục tiêu chính xác👇",
@@ -230,6 +234,10 @@ TEXTS = {
         "score_low_msg": "💪 Ngày mai hãy chú ý cân bằng đạm, chất xơ và lượng muối nhé.",
         "score_caption": "Điểm cuối cùng sẽ được chốt sau khi bạn ghi lại bữa tối.",
         "no_record_caption": "Chưa có ghi chép nào hôm nay. Hãy bắt đầu ghi lại bữa ăn ở trên nhé.",
+        "advice_label": "💬 Lời khuyên",
+        "translate_label": "🌐 Xem bản ghi này bằng ngôn ngữ",
+        "translate_btn": "Dịch",
+        "translating": "Đang dịch...",
         "history_header": "🗂️ Lịch sử bữa ăn",
         "history_login_prompt": "Đăng nhập để xem lịch sử bữa ăn trước đây của bạn.",
         "no_history": "Chưa có lịch sử nào được lưu.",
@@ -253,6 +261,131 @@ TEXTS = {
         "status_ok": "Đủ",
         "status_high": "Dư",
         "ai_output_lang_instruction": "Hãy trả lời toàn bộ bằng tiếng Việt.",
+    },
+    "en": {
+        "app_caption": "AI analyzes your meal photos and scores your nutritional balance every day.",
+        "disclaimer": (
+            "⚠️ This app provides simple AI-generated nutrition advice and is not a substitute for medical "
+            "diagnosis or treatment. If you have a pre-existing condition or health concerns, please consult "
+            "a doctor or registered dietitian before using this app."
+        ),
+        "lang_label": "🌐 Language",
+        "account_header": "🔑 Account",
+        "menu_login": "Log in",
+        "menu_signup": "Sign up",
+        "email_label": "Email",
+        "password_label": "Password",
+        "create_account_btn": "Create account",
+        "login_btn": "Log in",
+        "logged_in": "🔒 Logged in",
+        "logout_btn": "Log out",
+        "signup_success": "Account created! Please switch to “Log in” to continue.",
+        "max_users_reached": "This app is currently running a limited, invite-only beta. New sign-ups are closed for now.",
+        "signup_error": "Sign-up error: {e}",
+        "login_success": "Logged in successfully!",
+        "login_fail": "Login failed.",
+        "supabase_missing": "Supabase is not set up yet.",
+        "email_pw_required": "Please enter a valid email and password.",
+        "pw_too_short": "Password must be at least 8 characters and include both letters and numbers.",
+        "profile_header": "👤 Your Profile",
+        "profile_loaded": "✅ Loaded your saved profile",
+        "profile_hint": "⚠️ Please fill in the fields below so your target calories can be calculated accurately👇",
+        "age_label": "Age",
+        "gender_label": "Gender",
+        "gender_options": ["Male", "Female", "Other"],
+        "height_label": "Height (cm)",
+        "weight_label": "Weight (kg)",
+        "activity_label": "Activity level",
+        "activity_options": ["Low (mostly desk work)", "Moderate (exercise 2-3x/week)", "High (exercise/labor daily)"],
+        "illness_label": "Do you have any pre-existing conditions?",
+        "illness_options": ["None", "Yes"],
+        "illness_detail_label": "Condition or dietary restriction",
+        "purpose_label": "Goal",
+        "purpose_options": ["Weight loss", "Maintain current weight", "Bulk up (muscle gain)"],
+        "save_profile_btn": "💾 Save profile (auto-fill next time)",
+        "profile_saved": "Profile saved. It will be filled in automatically next time you log in.",
+        "target_calorie_label": "🎯 Estimated target calories/day",
+        "gemini_key_expander": "🔑 Use your own Gemini API Key (optional · unlimited)",
+        "gemini_key_caption": "If left blank, you can try {limit} free analyses/day using the shared key. If you'd like more, enter your own API Key.",
+        "gemini_key_label": "Gemini API Key",
+        "own_key_caption": "✅ Using your own API Key (unlimited)",
+        "shared_key_caption": "🆓 Using the shared key (remaining today: {remaining}/{limit})",
+        "tab_record": "📸 Today's Log",
+        "tab_history": "🗂️ History",
+        "record_header": "Log a meal",
+        "meal_type_label": "Meal type",
+        "meal_types": ["Breakfast", "Lunch", "Dinner", "Snack"],
+        "upload_label": "Upload a photo of your meal...",
+        "analyze_btn": "Analyze energy & nutrients",
+        "login_required": "Please log in from the sidebar first so your history can be saved.",
+        "quota_exceeded": "You've used up today's free analyses (shared key). Please try again tomorrow, or enter your own API Key in the sidebar.",
+        "own_key_required": "Please enter an API Key in the “Use your own Gemini API Key” section in the sidebar.",
+        "analyzing": "AI is analyzing...",
+        "quota_error": "⚠️ The free daily analysis limit has been reached. Please try again later, or check your own Gemini API Key's plan/usage.",
+        "api_key_error": "⚠️ The Gemini API Key appears to be invalid. Please check it and try again.",
+        "generic_error": "An error occurred: {e}",
+        "record_success": "✅ Logged: {menu}",
+        "login_prompt_record": "Log in to see today's log and score here.",
+        "today_calorie_header": "🔥 Today's Calories",
+        "col_target": "Target",
+        "col_consumed": "Consumed",
+        "col_remaining": "Remaining",
+        "pfc_header": "⚖️ Today's PFC Balance",
+        "col_gram": "Grams",
+        "col_kcal": "Calories",
+        "col_percent": "Ratio",
+        "protein": "Protein",
+        "fat": "Fat",
+        "carbs": "Carbs",
+        "micro_header": "🧪 Fiber, Sodium & Vitamins",
+        "col_today_total": "Today's total",
+        "col_guideline": "General daily guideline",
+        "fiber": "Fiber",
+        "sodium": "Sodium (salt equiv.)",
+        "vitamin_c": "Vitamin C",
+        "vitamin_d": "Vitamin D",
+        "calcium": "Calcium",
+        "iron": "Iron",
+        "micro_caption": "※ These are AI estimates from the photo, not precise nutrition facts.",
+        "micro_chart_y": "% (guideline = 100%)",
+        "meal_score_header": "🍽️ Today's Meals & Scores",
+        "col_meal_type": "Type",
+        "col_menu": "Meal",
+        "col_score": "Score",
+        "final_score_label": "🏆 Today's Final Score",
+        "current_score_label": "📊 Current Score (in progress)",
+        "score_high_msg": "🎉 Great balance today! Keep it up.",
+        "score_mid_msg": "👍 Pretty good. Tomorrow, try adding a bit more vegetables and fiber.",
+        "score_low_msg": "💪 Tomorrow, try to balance protein, fiber, and sodium a bit more.",
+        "score_caption": "Your final score for the day is set once you log dinner.",
+        "no_record_caption": "No meals logged today yet. Try logging one using the form above.",
+        "advice_label": "💬 Advice",
+        "translate_label": "🌐 View this record in",
+        "translate_btn": "Translate",
+        "translating": "Translating...",
+        "history_header": "🗂️ Meal History",
+        "history_login_prompt": "Log in to see your past meal history.",
+        "no_history": "No meal history saved yet.",
+        "select_history_label": "Review a past analysis:",
+        "detail_header": "📄 Detailed analysis: {menu}",
+        "delete_btn": "🗑️ Delete this record",
+        "delete_success": "Deleted.",
+        "download_btn": "⬇️ Download all history (CSV)",
+        "history_error": "Failed to load history data: {e}",
+        "shopping_header": "🛒 Shop for what you're missing",
+        "shopping_label": "Supplement keyword to search for",
+        "amazon_btn": "👉 View “{kw}” on Amazon",
+        "rakuten_btn": "👉 View “{kw}” on Rakuten",
+        "policy_expander": "📜 Terms & Privacy Policy",
+        "policy_text": (
+            "This app protects registered user information via Supabase and does not disclose it to third "
+            "parties without permission. This app participates in the Amazon Associates and Rakuten "
+            "Affiliate programs."
+        ),
+        "status_low": "Low",
+        "status_ok": "OK",
+        "status_high": "High",
+        "ai_output_lang_instruction": "Please respond entirely in English.",
     },
 }
 
@@ -317,12 +450,15 @@ components.html(
 if "lang" not in st.session_state:
     st.session_state["lang"] = "ja"
 
+LANG_LABELS = ["日本語", "Tiếng Việt", "English"]
+LANG_CODES = ["ja", "vi", "en"]
+
 lang_choice = st.sidebar.radio(
-    TEXTS["ja"]["lang_label"] + " / " + TEXTS["vi"]["lang_label"],
-    ["日本語", "Tiếng Việt"],
-    index=0 if st.session_state["lang"] == "ja" else 1,
+    " / ".join(TEXTS[c]["lang_label"] for c in LANG_CODES),
+    LANG_LABELS,
+    index=LANG_CODES.index(st.session_state["lang"]) if st.session_state["lang"] in LANG_CODES else 0,
 )
-st.session_state["lang"] = "ja" if lang_choice == "日本語" else "vi"
+st.session_state["lang"] = LANG_CODES[LANG_LABELS.index(lang_choice)]
 T = TEXTS[st.session_state["lang"]]
 
 st.title("🍁 FitCompanion")
@@ -438,6 +574,15 @@ if not st.session_state["auth_restore_attempted"] and st.session_state["user_id"
 MAX_REGISTERED_USERS = 6
 
 
+def is_valid_password(pw: str) -> bool:
+    """8文字以上、かつ英字と数字を両方含むことを要求する。"""
+    if len(pw) < 8:
+        return False
+    has_letter = re.search(r"[A-Za-z]", pw) is not None
+    has_digit = re.search(r"[0-9]", pw) is not None
+    return has_letter and has_digit
+
+
 def get_registered_user_count() -> int:
     """user_profilesテーブルの行数を「登録済みユーザー数」の目安として数える。
     新規登録時に必ず1行作成するため、実質的な登録者数と一致する。"""
@@ -464,7 +609,7 @@ if st.session_state["user_id"] is None:
                 st.sidebar.error(T["supabase_missing"])
             elif not email.strip() or not password.strip():
                 st.sidebar.error(T["email_pw_required"])
-            elif len(password.strip()) < 6:
+            elif not is_valid_password(password.strip()):
                 st.sidebar.error(T["pw_too_short"])
             elif get_registered_user_count() >= MAX_REGISTERED_USERS:
                 st.sidebar.error(T["max_users_reached"])
@@ -698,6 +843,26 @@ def extract_advice(text: str) -> str:
     return match.group(1).strip() if match else text.strip()
 
 
+def translate_text(text: str, target_lang_name: str) -> str:
+    """過去の記録(Markdown形式)を指定言語に翻訳する。見出し・箇条書きの構造は保持する。
+    翻訳に失敗した場合は元のテキストをそのまま返す。"""
+    if not api_key or not text:
+        return text
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-3.5-flash-lite")
+        prompt = (
+            f"以下はMarkdown形式の栄養分析結果です。見出し(###)や箇条書き(-)の構造はそのまま保ち、"
+            f"値(数字や単位)も変えずに、文章の内容だけを{target_lang_name}に翻訳してください。"
+            f"翻訳後のテキストのみを出力し、前置きは不要です。\n\n{text}"
+        )
+        generation_config = genai.types.GenerationConfig(max_output_tokens=500)
+        response = model.generate_content(prompt, generation_config=generation_config)
+        return response.text
+    except Exception:
+        return text
+
+
 def parse_nutrition(text: str) -> dict:
     return {
         "menu_name": extract_menu_name(text),
@@ -773,6 +938,17 @@ def suggest_shopping_keyword(totals: dict) -> str:
             "calcium": "Canxi bổ sung",
             "iron": "Sắt bổ sung",
             "fallback": ["Bột rau xanh", "Nước uống thể thao", "Thanh protein", "Hạt hỗn hợp rang mộc", "Sữa chua không đường"],
+        },
+        "en": {
+            "protein": "whey protein powder",
+            "fat": "omega 3 DHA EPA supplement",
+            "fiber": "fiber supplement",
+            "sodium": "low sodium seasoning",
+            "vitamin_c": "vitamin C supplement",
+            "vitamin_d": "vitamin D supplement",
+            "calcium": "calcium supplement",
+            "iron": "iron supplement",
+            "fallback": ["green superfood powder", "sports drink", "protein bar", "roasted mixed nuts", "plain yogurt"],
         },
     }[lang]
 
@@ -922,20 +1098,17 @@ def render_today_tables(rows: list, target_calories: float):
 
     if rows:
         st.subheader(T["meal_score_header"])
-        meal_list = []
         scores = []
         for r in rows:
             score = calculate_meal_score(r["protein_g"], r["fat_g"], r["carbs_g"], r["fiber_g"], r["sodium_g"])
             scores.append(score)
-            meal_list.append(
-                {
-                    T["col_meal_type"]: r["meal_type"],
-                    T["col_menu"]: r.get("menu_name", ""),
-                    T["col_kcal"]: f"{r['calories_num']:.0f} kcal",
-                    T["col_score"]: f"{score:.0f}",
-                }
-            )
-        st.table(pd.DataFrame(meal_list))
+            with st.container(border=True):
+                col_info, col_score = st.columns([4, 1])
+                col_info.markdown(f"**[{r['meal_type']}] {r.get('menu_name', '')}**　{r['calories_num']:.0f} kcal")
+                col_score.metric(T["col_score"], f"{score:.0f}")
+                advice_text = extract_advice(r.get("detail_advice") or "")
+                if advice_text:
+                    st.caption(f"{T['advice_label']}: {advice_text}")
 
         avg_score = sum(scores) / len(scores)
         has_dinner = any(r["meal_type"] == T["meal_types"][2] for r in rows)
@@ -1023,7 +1196,9 @@ with tab_record:
                         - **鉄分**: 〇mg
 
                         ### 📝 アドバイス
-                        (1〜2文で簡潔に。目標カロリー{target_calories:.0f}kcal/日との兼ね合いに軽く触れる)
+                        (2〜3文で簡潔に。目標カロリー{target_calories:.0f}kcal/日との兼ね合いに軽く触れつつ、
+                        今不足している栄養素を補うために「次の食事で食べると良い具体的な食品」を1〜2個、
+                        必ず名前を挙げて提案してください。)
                         """
                         # 出力トークン数の上限を絞って生成時間を短縮する
                         generation_config = genai.types.GenerationConfig(max_output_tokens=400)
@@ -1120,7 +1295,31 @@ with tab_history:
 
                 st.markdown("---")
                 st.subheader(T["detail_header"].format(menu=selected_row["menu_name"]))
-                st.markdown(selected_row["detail_advice"])
+
+                lang_display_names = {"ja": "日本語", "vi": "Tiếng Việt", "en": "English"}
+                col_lang, col_btn = st.columns([3, 1])
+                translate_choice = col_lang.selectbox(
+                    T["translate_label"],
+                    LANG_LABELS,
+                    index=LANG_CODES.index(st.session_state["lang"]),
+                    key=f"translate_lang_{selected_row['id']}",
+                )
+                target_code = LANG_CODES[LANG_LABELS.index(translate_choice)]
+                cache_key = f"translated_{selected_row['id']}_{target_code}"
+
+                col_btn.write("")
+                col_btn.write("")
+                if col_btn.button(T["translate_btn"], key=f"translate_btn_{selected_row['id']}"):
+                    if not api_key:
+                        st.warning(T["own_key_required"] if not SHARED_GEMINI_KEY else T["quota_exceeded"])
+                    else:
+                        with st.spinner(T["translating"]):
+                            st.session_state[cache_key] = translate_text(
+                                selected_row["detail_advice"], lang_display_names[target_code]
+                            )
+
+                display_text = st.session_state.get(cache_key, selected_row["detail_advice"])
+                st.markdown(display_text)
 
                 col_del, col_export = st.columns(2)
                 with col_del:
