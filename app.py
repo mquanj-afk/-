@@ -576,13 +576,9 @@ def save_profile(user_id: str, profile_data: dict) -> bool:
 
 AUTH_COOKIE_NAME = "fitcompanion_refresh_token"
 
-
-@st.cache_resource(show_spinner=False)
-def get_cookie_manager():
-    return stx.CookieManager()
-
-
-cookie_manager = get_cookie_manager()
+# CookieManagerの内部でコンポーネント(ウィジェット)呼び出しが発生するため、
+# st.cache_resourceで囲むとCachedWidgetWarning/エラーになる。キャッシュせず毎回生成する。
+cookie_manager = stx.CookieManager(key="fitcompanion_cookie_manager")
 
 
 def set_auth_cookie(refresh_token: str, widget_key: str):
