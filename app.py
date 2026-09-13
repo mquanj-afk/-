@@ -24,6 +24,7 @@ TEXTS = {
         ),
         "lang_label": "🌐 言語",
         "account_header": "🔑 アカウント",
+        "auth_menu_label": "メニュー",
         "menu_login": "ログイン",
         "menu_signup": "新規会員登録",
         "email_label": "メールアドレス",
@@ -38,6 +39,9 @@ TEXTS = {
         "login_success": "ログイン成功！",
         "login_fail": "ログインに失敗しました。",
         "supabase_missing": "Supabaseの設定が未完了です。",
+        "secrets_missing_dev": "⚠️ Secretsが未設定です。下に直接入力してください。",
+        "supabase_init_error": "Supabaseの初期設定エラーです。URLとKeyを確認してください。",
+        "profile_save_error": "プロフィール保存エラー: {e}",
         "email_pw_required": "メールアドレスとパスワードを両方正しく入力してください。",
         "pw_too_short": "パスワードは8文字以上で、英字と数字の両方を含めてください。",
         "profile_header": "👤 利用者プロフィール",
@@ -150,6 +154,7 @@ TEXTS = {
         ),
         "lang_label": "🌐 Ngôn ngữ",
         "account_header": "🔑 Tài khoản",
+        "auth_menu_label": "Menu",
         "menu_login": "Đăng nhập",
         "menu_signup": "Đăng ký mới",
         "email_label": "Email",
@@ -164,6 +169,9 @@ TEXTS = {
         "login_success": "Đăng nhập thành công!",
         "login_fail": "Đăng nhập thất bại.",
         "supabase_missing": "Chưa thiết lập xong Supabase.",
+        "secrets_missing_dev": "⚠️ Chưa thiết lập Secrets. Vui lòng nhập trực tiếp bên dưới.",
+        "supabase_init_error": "Lỗi khởi tạo Supabase. Vui lòng kiểm tra URL và Key.",
+        "profile_save_error": "Lỗi khi lưu hồ sơ: {e}",
         "email_pw_required": "Vui lòng nhập đầy đủ và chính xác email và mật khẩu.",
         "pw_too_short": "Mật khẩu phải có ít nhất 8 ký tự và bao gồm cả chữ cái và số.",
         "profile_header": "👤 Hồ sơ cá nhân",
@@ -277,6 +285,7 @@ TEXTS = {
         ),
         "lang_label": "🌐 Language",
         "account_header": "🔑 Account",
+        "auth_menu_label": "Menu",
         "menu_login": "Log in",
         "menu_signup": "Sign up",
         "email_label": "Email",
@@ -291,6 +300,9 @@ TEXTS = {
         "login_success": "Logged in successfully!",
         "login_fail": "Login failed.",
         "supabase_missing": "Supabase is not set up yet.",
+        "secrets_missing_dev": "⚠️ Secrets are not set up. Please enter them directly below.",
+        "supabase_init_error": "Supabase initialization error. Please check the URL and Key.",
+        "profile_save_error": "Error saving profile: {e}",
         "email_pw_required": "Please enter a valid email and password.",
         "pw_too_short": "Password must be at least 8 characters and include both letters and numbers.",
         "profile_header": "👤 Your Profile",
@@ -399,7 +411,9 @@ TEXTS = {
 # =========================================================
 # 1. 画面の初期設定
 # =========================================================
-st.set_page_config(page_title="FitCompanion", page_icon="🍁", layout="wide")
+st.set_page_config(
+    page_title="FitCompanion", page_icon="🍁", layout="wide", initial_sidebar_state="expanded"
+)
 
 # Streamlit標準の「Deploy」ボタン・GitHubアイコンは .streamlit/config.toml (toolbarMode="minimal")
 # で非表示にしている。ここではフッターの「Made with Streamlit」表記も非表示にする。
@@ -547,7 +561,7 @@ try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except Exception:
-    st.sidebar.warning("⚠️ Secretsが未設定です。下に直接入力してください。")
+    st.sidebar.warning(T["secrets_missing_dev"])
     SUPABASE_URL = st.sidebar.text_input("Supabase URL", value="")
     SUPABASE_KEY = st.sidebar.text_input("Supabase Key", value="", type="password")
 
@@ -562,7 +576,7 @@ if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = get_supabase(SUPABASE_URL, SUPABASE_KEY)
     except Exception:
-        st.error("Supabaseの初期設定エラーです。URLとKeyを確認してください。")
+        st.error(T["supabase_init_error"])
 
 for key, default in {
     "user_id": None,
@@ -594,7 +608,7 @@ def save_profile(user_id: str, profile_data: dict) -> bool:
         supabase.table("user_profiles").upsert(payload, on_conflict="user_id").execute()
         return True
     except Exception as e:
-        st.sidebar.error(f"プロフィール保存エラー: {e}")
+        st.sidebar.error(T["profile_save_error"].format(e=e))
         return False
 
 
@@ -657,7 +671,7 @@ def is_valid_password(pw: str) -> bool:
 st.sidebar.header(T["account_header"])
 
 if st.session_state["user_id"] is None:
-    auth_action = st.sidebar.radio("メニュー", [T["menu_login"], T["menu_signup"]])
+    auth_action = st.sidebar.radio(T["auth_menu_label"], [T["menu_login"], T["menu_signup"]])
     email = st.sidebar.text_input(T["email_label"], autocomplete="email")
     password_autocomplete = "new-password" if auth_action == T["menu_signup"] else "current-password"
     password = st.sidebar.text_input(T["password_label"], type="password", autocomplete=password_autocomplete)
