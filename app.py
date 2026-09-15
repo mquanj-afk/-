@@ -33,7 +33,7 @@ TEXTS = {
         "login_btn": "ログインする",
         "logged_in": "🔒 ログイン中",
         "logout_btn": "ログアウト",
-        "signup_success": "登録完了！「ログイン」に切り替えてログインしてください。",
+        "signup_success": "📩 確認メールを送信しました。メール内のリンクをクリックして認証を完了したあと、「ログイン」に切り替えてログインしてください。(件名や差出人に「FitCompanion」と入っていない場合がありますが、正しいメールです。迷惑メールフォルダもご確認ください)",
         "max_users_reached": "現在、招待制のクローズドベータ運用中のため、新規登録の受付を停止しています。",
         "signup_error": "登録エラー: {e}",
         "login_success": "ログイン成功！",
@@ -163,7 +163,7 @@ TEXTS = {
         "login_btn": "Đăng nhập",
         "logged_in": "🔒 Đã đăng nhập",
         "logout_btn": "Đăng xuất",
-        "signup_success": "Đăng ký thành công! Vui lòng chuyển sang mục “Đăng nhập” để tiếp tục.",
+        "signup_success": "📩 Đã gửi email xác nhận. Vui lòng nhấn vào liên kết trong email để xác thực, sau đó chuyển sang mục “Đăng nhập”. (Tên người gửi có thể không hiển thị là “FitCompanion” nhưng đây là email hợp lệ — hãy kiểm tra cả thư mục spam)",
         "max_users_reached": "Hiện đang trong giai đoạn thử nghiệm giới hạn số lượng người dùng, tạm thời không nhận đăng ký mới.",
         "signup_error": "Lỗi đăng ký: {e}",
         "login_success": "Đăng nhập thành công!",
@@ -294,7 +294,7 @@ TEXTS = {
         "login_btn": "Log in",
         "logged_in": "🔒 Logged in",
         "logout_btn": "Log out",
-        "signup_success": "Account created! Please switch to “Log in” to continue.",
+        "signup_success": "📩 A confirmation email has been sent. Please click the link in the email to verify your account, then switch to “Log in”. (The sender name may not say “FitCompanion” — please also check your spam folder)",
         "max_users_reached": "This app is currently running a limited, invite-only beta. New sign-ups are closed for now.",
         "signup_error": "Sign-up error: {e}",
         "login_success": "Logged in successfully!",
@@ -1287,6 +1287,10 @@ with tab_record:
                         あなたはプロの管理栄養士です。食事画像から情報を解析してください。
                         利用者の健康データ：年齢 {age}歳、性別 {gender}、身長 {height}cm、体重 {weight}kg、目的 {purpose}、持病：{illness_prompt}
                         この食事の区分：{meal_type}
+
+                        【見積もりの注意】画像の分量は、一般的な家庭・コンビニ・外食チェーンの標準的な一人前を基準にしてください。
+                        実際より多めに盛られているように錯覚しやすいので、過大評価を避け、控えめ・現実的な数値を心がけてください。
+                        不明な食材は量を誇張せず、平均的な分量として計算してください。
 
                         【出力フォーマット】以下の見出しとラベル名(### や **メニュー名** など)は、
                         言語設定に関わらず必ずこの通り正確に日本語のまま出力してください。
