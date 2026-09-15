@@ -548,7 +548,12 @@ lang_choice = st.sidebar.radio(
     LANG_LABELS,
     index=LANG_CODES.index(st.session_state["lang"]) if st.session_state["lang"] in LANG_CODES else 0,
 )
-st.session_state["lang"] = LANG_CODES[LANG_LABELS.index(lang_choice)]
+new_lang = LANG_CODES[LANG_LABELS.index(lang_choice)]
+if new_lang != st.session_state["lang"]:
+    # 言語切り替え時、直前の分析結果(切り替え前の言語)がそのまま表示され続けるのを防ぐ
+    st.session_state["current_result"] = None
+    st.session_state["current_nutrition"] = None
+st.session_state["lang"] = new_lang
 T = TEXTS[st.session_state["lang"]]
 
 st.title("🍁 FitCompanion")
@@ -605,7 +610,11 @@ def save_profile(user_id: str, profile_data: dict) -> bool:
         return False
     try:
         payload = {"user_id": user_id, **profile_data}
-        supabase.table("user_profiles").upsert(payload, on_conflict="user_id").execute()
+        res = supabase.table("user_profiles").upsert(payload, on_conflict="user_id").execute()
+        # RLSポリシー等でブロックされ、実際には0件しか反映されなかった場合を検知する
+        if not res.data:
+            st.sidebar.error(T["profile_save_error"].format(e="No rows affected (RLSポリシーをご確認ください)"))
+            return False
         return True
     except Exception as e:
         st.sidebar.error(T["profile_save_error"].format(e=e))
@@ -1265,15 +1274,20 @@ with tab_record:
                             "特になし" if has_illness == illness_options[0] else f"持病・制限：{illness_detail}"
                         )
 
+                        content_lang_name = {"ja": "日本語", "vi": "Tiếng Việt", "en": "English"}[
+                            st.session_state["lang"]
+                        ]
+
                         prompt = f"""
                         あなたはプロの管理栄養士です。食事画像から情報を解析してください。
                         利用者の健康データ：年齢 {age}歳、性別 {gender}、身長 {height}cm、体重 {weight}kg、目的 {purpose}、持病：{illness_prompt}
                         この食事の区分：{meal_type}
-                        {T["ai_output_lang_instruction"]}
 
-                        【出力フォーマット】(この形式を厳守してください。ラベル名(メニュー名、総カロリー等)は必ず日本語のまま、値と文章のみ指定言語にしてください)
+                        【出力フォーマット】以下の見出しとラベル名(### や **メニュー名** など)は、
+                        言語設定に関わらず必ずこの通り正確に日本語のまま出力してください。
+                        メニュー名の内容とアドバイスの文章だけを{content_lang_name}で書いてください。
                         ### 📊 栄養・カロリー計算結果
-                        - **メニュー名**:（料理名）
+                        - **メニュー名**:（料理名。{content_lang_name}で）
                         - **総カロリー**: 〇〇 kcal
                         - **タンパク質**: 〇g
                         - **脂質**: 〇g
@@ -1286,8 +1300,8 @@ with tab_record:
                         - **鉄分**: 〇mg
 
                         ### 📝 アドバイス
-                        (2〜3文で簡潔に。目標カロリー{target_calories:.0f}kcal/日との兼ね合いに軽く触れつつ、
-                        今不足している栄養素を補うために「次の食事で食べると良い具体的な食品」を1〜2個、
+                        ({content_lang_name}で2〜3文。目標カロリー{target_calories:.0f}kcal/日との兼ね合いに軽く触れつつ、
+                        今不足している栄養素を補うために次の食事で食べると良い具体的な食品を1〜2個、
                         必ず名前を挙げて提案してください。)
                         """
                         # 出力トークン数の上限を絞って生成時間を短縮する
