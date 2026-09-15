@@ -986,11 +986,12 @@ def calculate_meal_score(protein_g, fat_g, carbs_g, fiber_g, sodium_g) -> float:
     c_ratio = carbs_g * 4 / total_kcal
     ideal = {"p": 0.18, "f": 0.25, "c": 0.57}
     deviation = abs(p_ratio - ideal["p"]) + abs(f_ratio - ideal["f"]) + abs(c_ratio - ideal["c"])
-    score = 100 - deviation * 150
+    # 係数を150→60に緩和。多少偏った食事でもいきなり0点にならないようにする。
+    score = 100 - deviation * 60
     if fiber_g >= 3:
         score += 5
     if sodium_g > 3:
-        score -= (sodium_g - 3) * 10
+        score -= (sodium_g - 3) * 5
     return max(0, min(100, score))
 
 
@@ -1205,7 +1206,11 @@ def render_today_tables(rows: list, target_calories: float):
                 col_score.metric(T["col_score"], f"{score:.0f}")
                 advice_text = extract_advice(r.get("detail_advice") or "")
                 if advice_text:
-                    st.caption(f"{T['advice_label']}: {advice_text}")
+                    st.markdown(
+                        f"""<div style="color:#3B2A2A; font-size:0.95em; margin-top:4px; line-height:1.5;">
+                        {T['advice_label']}: {advice_text}</div>""",
+                        unsafe_allow_html=True,
+                    )
 
         avg_score = sum(scores) / len(scores)
         has_dinner = any(r["meal_type"] == T["meal_types"][2] for r in rows)
