@@ -33,7 +33,7 @@ TEXTS = {
         "login_btn": "ログインする",
         "logged_in": "🔒 ログイン中",
         "logout_btn": "ログアウト",
-        "signup_success": "📩 確認メールを送信しました。メール内のリンクをクリックして認証を完了したあと、「ログイン」に切り替えてログインしてください。(件名や差出人に「FitCompanion」と入っていない場合がありますが、正しいメールです。迷惑メールフォルダもご確認ください)",
+        "signup_success": "✅ 登録完了！そのまま「ログイン」に切り替えてログインしてください。",
         "max_users_reached": "現在、招待制のクローズドベータ運用中のため、新規登録の受付を停止しています。",
         "signup_error": "登録エラー: {e}",
         "login_success": "ログイン成功！",
@@ -163,7 +163,7 @@ TEXTS = {
         "login_btn": "Đăng nhập",
         "logged_in": "🔒 Đã đăng nhập",
         "logout_btn": "Đăng xuất",
-        "signup_success": "📩 Đã gửi email xác nhận. Vui lòng nhấn vào liên kết trong email để xác thực, sau đó chuyển sang mục “Đăng nhập”. (Tên người gửi có thể không hiển thị là “FitCompanion” nhưng đây là email hợp lệ — hãy kiểm tra cả thư mục spam)",
+        "signup_success": "✅ Đăng ký thành công! Vui lòng chuyển sang mục “Đăng nhập” để tiếp tục.",
         "max_users_reached": "Hiện đang trong giai đoạn thử nghiệm giới hạn số lượng người dùng, tạm thời không nhận đăng ký mới.",
         "signup_error": "Lỗi đăng ký: {e}",
         "login_success": "Đăng nhập thành công!",
@@ -294,7 +294,7 @@ TEXTS = {
         "login_btn": "Log in",
         "logged_in": "🔒 Logged in",
         "logout_btn": "Log out",
-        "signup_success": "📩 A confirmation email has been sent. Please click the link in the email to verify your account, then switch to “Log in”. (The sender name may not say “FitCompanion” — please also check your spam folder)",
+        "signup_success": "✅ Account created! Please switch to “Log in” to continue.",
         "max_users_reached": "This app is currently running a limited, invite-only beta. New sign-ups are closed for now.",
         "signup_error": "Sign-up error: {e}",
         "login_success": "Logged in successfully!",
@@ -940,6 +940,21 @@ def extract_advice(text: str) -> str:
     return match.group(1).strip() if match else text.strip()
 
 
+def is_wrong_language(text: str, lang: str) -> bool:
+    """AIの回答が指定言語になっていなさそうかを簡易判定する。
+    日本語指定なのに日本語の文字(ひらがな・カタカナ・漢字)が全く含まれない場合や、
+    ベトナム語指定なのにベトナム語特有のアクセント記号が全く含まれない場合に True。"""
+    if not text:
+        return False
+    if lang == "ja":
+        return not re.search(r"[ぁ-んァ-ヶ一-龠]", text)
+    if lang == "vi":
+        return not re.search(
+            r"[ăâđêôơưàằầéèềẻẳểẽẵễạặậáắấíìỉĩịóòồờỏổởõỗỡọộợúùừủửũữụưứýỳỷỹỵ]", text, re.IGNORECASE
+        )
+    return False
+
+
 def translate_text(text: str, target_lang_name: str) -> str:
     """過去の記録(Markdown形式)を指定言語に翻訳する。見出し・箇条書きの構造は保持する。
     翻訳に失敗した場合は元のテキストをそのまま返す。"""
@@ -1294,7 +1309,8 @@ with tab_record:
 
                         【出力フォーマット】以下の見出しとラベル名(### や **メニュー名** など)は、
                         言語設定に関わらず必ずこの通り正確に日本語のまま出力してください。
-                        メニュー名の内容とアドバイスの文章だけを{content_lang_name}で書いてください。
+                        メニュー名の内容とアドバイスの文章は、必ず{content_lang_name}だけで書いてください。
+                        英語(English)は、{content_lang_name}が英語である場合を除き、絶対に使わないでください。
                         ### 📊 栄養・カロリー計算結果
                         - **メニュー名**:（料理名。{content_lang_name}で）
                         - **総カロリー**: 〇〇 kcal
@@ -1319,6 +1335,12 @@ with tab_record:
                             [prompt, image_resized], generation_config=generation_config
                         )
                         result_text = response.text
+
+                        # 指示通りの言語になっていなければ、自動で翻訳し直す(セーフティネット)
+                        advice_check = extract_advice(result_text)
+                        if is_wrong_language(advice_check, st.session_state["lang"]):
+                            result_text = translate_text(result_text, content_lang_name)
+
                         nutrition = parse_nutrition(result_text)
 
                         st.session_state["current_result"] = result_text
